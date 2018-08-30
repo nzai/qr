@@ -2,18 +2,12 @@ package quotes
 
 import "io"
 
-// Encoder 可编码的
+// Encoder define types can be encode to io.Writer
 type Encoder interface {
 	Encode(w io.Writer) error
 }
 
-// Decoder 可解码的
+// Decoder define types can be decode from io.Reader
 type Decoder interface {
 	Decode(r io.Reader) error
-}
-
-// EncodeDecoder 可编码解码的
-type EncodeDecoder interface {
-	Encoder
-	Decoder
 }

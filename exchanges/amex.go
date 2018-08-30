@@ -7,61 +7,59 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nzai/qr/sources"
-
-	"github.com/nzai/go-utility/net"
+	"github.com/nzai/netop"
 	"github.com/nzai/qr/constants"
 	"github.com/nzai/qr/quotes"
+	"github.com/nzai/qr/sources"
 	"go.uber.org/zap"
 )
 
-// Amex 美国证券交易所
+// Amex define american stock exchange
 type Amex struct {
 	source sources.Source
 }
 
-// NewAmex 新建美国证券交易所
+// NewAmex create american stock exchange
 func NewAmex() *Amex {
 	return &Amex{sources.NewYahooFinance()}
 }
 
-// Code 代码
+// Code get exchange code
 func (s Amex) Code() string {
 	return "Amex"
 }
 
-// Location 所处时区
+// Location get exchange location
 func (s Amex) Location() *time.Location {
 	location, _ := time.LoadLocation("America/New_York")
 	return location
 }
 
-// Companies 上市公司
+// Companies get exchange companies
 func (s Amex) Companies() ([]*quotes.Company, error) {
 
 	url := "http://www.nasdaq.com/screening/companies-by-industry.aspx?exchange=NASDAQ&render=download"
 
-	//	尝试从网络获取实时上市公司列表
-	csv, err := net.DownloadStringRetry(url, constants.RetryCount, constants.RetryInterval)
+	// download csv from nasdaq
+	csv, err := netop.GetString(url, netop.Retry(constants.RetryCount, constants.RetryInterval))
 	if err != nil {
 		zap.L().Error("download amex companies failed", zap.Error(err), zap.String("url", url))
 		return nil, err
 	}
 
-	// 解析CSV
 	companies, err := s.parseCSV(csv)
 	if err != nil {
 		zap.L().Error("parse csv failed", zap.Error(err), zap.String("csv", csv))
 		return nil, err
 	}
 
-	// 按Code排序
+	// sort companies by code
 	sort.Sort(quotes.CompanyList(companies))
 
 	return companies, nil
 }
 
-// parseCSV 解析CSV
+// parseCSV parse result csv
 func (s Amex) parseCSV(content string) ([]*quotes.Company, error) {
 
 	reader := csv.NewReader(strings.NewReader(content))
@@ -98,7 +96,7 @@ func (s Amex) parseCSV(content string) ([]*quotes.Company, error) {
 	return companies, nil
 }
 
-// Crawl 抓取
+// Crawl company daily quote
 func (s Amex) Crawl(company *quotes.Company, date time.Time) (*quotes.DailyQuote, error) {
 	return s.source.Crawl(company, date, "")
 }

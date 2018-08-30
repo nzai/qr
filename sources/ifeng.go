@@ -2,12 +2,13 @@ package sources
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strconv"
 	"time"
 
-	"github.com/nzai/go-utility/net"
+	"github.com/nzai/netop"
 	"github.com/nzai/qr/constants"
 	"github.com/nzai/qr/quotes"
 	"go.uber.org/zap"
@@ -26,25 +27,33 @@ func NewIFengFinance() *IFengFinance {
 
 // QuerySplitAndDividend 查询拆股和除权
 func (s IFengFinance) QuerySplitAndDividend(company *quotes.Company, date time.Time) (*quotes.Dividend, *quotes.Split, error) {
-
 	url := fmt.Sprintf("http://app.finance.ifeng.com/data/stock/tab_fhpxjl.php?symbol=%s", company.Code)
 
 	// 查询凤凰财经数据接口,返回分红配股信息
-	html, err := net.DownloadStringRetry(url, constants.RetryCount, constants.RetryInterval)
+	response, err := netop.Get(url, netop.Retry(constants.RetryCount, constants.RetryInterval))
 	if err != nil {
-		re, ok := err.(*net.ResponseError)
-		if !ok || re.StatusCode != http.StatusForbidden {
-			zap.L().Warn("download dividend and split failed", zap.Error(err), zap.String("url", url))
-			return nil, nil, err
-		}
+		zap.L().Warn("download dividend and split failed", zap.Error(err), zap.String("url", url))
+		return nil, nil, err
+	}
+	defer response.Body.Close()
+
+	// ignore on server forbidden
+	if response.StatusCode == http.StatusForbidden {
+		return nil, nil, nil
+	}
+
+	buffer, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		zap.L().Error("download dividend and split failed", zap.Error(err), zap.String("url", url))
+		return nil, nil, err
 	}
 
 	dateText := date.Format("2006-01-02")
-	for _, matches := range s.pattern.FindAllStringSubmatch(html, -1) {
+	for _, matches := range s.pattern.FindAllStringSubmatch(string(buffer), -1) {
 		if len(matches) != 5 {
 			zap.L().Error("ifeng finance html match count invalid",
 				zap.Any("matches", matches),
-				zap.String("html", html))
+				zap.ByteString("html", buffer))
 			return nil, nil, fmt.Errorf("ifeng finance html match count invalid due to matches count: %d", len(matches))
 		}
 

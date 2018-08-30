@@ -8,14 +8,14 @@ import (
 	"go.uber.org/zap"
 )
 
-// Dividend 股息分红
+// Dividend define stock dividend
 type Dividend struct {
 	Enable    bool
 	Timestamp uint64
 	Amount    float32
 }
 
-// Encode 编码
+// Encode encode dividend to io.Writer
 func (d Dividend) Encode(w io.Writer) error {
 	bw := bio.NewBinaryWriter(w)
 
@@ -44,7 +44,7 @@ func (d Dividend) Encode(w io.Writer) error {
 	return nil
 }
 
-// Decode 解码
+// Decode decode dividend from io.Reader
 func (d *Dividend) Decode(r io.Reader) error {
 	br := bio.NewBinaryReader(r)
 
@@ -77,7 +77,7 @@ func (d *Dividend) Decode(r io.Reader) error {
 	return nil
 }
 
-// Equal 是否相同
+// Equal check dividend is equal
 func (d Dividend) Equal(s Dividend) error {
 
 	if d.Enable != s.Enable {

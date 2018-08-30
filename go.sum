@@ -4,8 +4,8 @@ github.com/guotie/gogb2312 v0.0.0-20160513031741-a052a05f3e7e h1:f7jJogREo6iPZyJ
 github.com/guotie/gogb2312 v0.0.0-20160513031741-a052a05f3e7e/go.mod h1:IHJAl8nTHDYlOUIkSmRCjjgCZreaGm5yc7R0Yw2l72g=
 github.com/nzai/bio v0.1.2 h1:CslEDez4LuctH2kfjUMkIue9eOLHSHHl9MiCfPUAtiw=
 github.com/nzai/bio v0.1.2/go.mod h1:+re02otbgAwo7nTaV9hfuEEWPa0tLCQfds1aWCnxecc=
-github.com/nzai/go-utility v0.0.0-20180725085250-91af5f66fe57 h1:O3bR5NVw/z95CjAI5BP4bJrzEF+J5si4iOjfdoVfaBk=
-github.com/nzai/go-utility v0.0.0-20180725085250-91af5f66fe57/go.mod h1:8YXlNguqJ7ACEpgo+lDgXu054wMZB9sio4HyFIDxS1M=
+github.com/nzai/netop v0.1.1 h1:RkMZWoqKmeAq6SqybCGcbnc8aIrfpKymhI1ZJCEfRAA=
+github.com/nzai/netop v0.1.1/go.mod h1:2O9ZNoTMh3ZXqXC5jLkG0N+gCnMA2QlJswAnlxUwoUU=
 github.com/pkg/errors v0.8.0 h1:WdK/asTD0HN+q6hsWO3/vpuAkAr+tw6aNJNDFFf0+qw=
 github.com/pkg/errors v0.8.0/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=

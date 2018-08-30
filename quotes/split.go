@@ -8,15 +8,15 @@ import (
 	"go.uber.org/zap"
 )
 
-// Split 拆股
+// Split define stock split
 type Split struct {
 	Enable      bool
 	Timestamp   uint64  `json:"date"`
-	Numerator   float32 `json:"numerator"`   // 分子
-	Denominator float32 `json:"denominator"` // 分母
+	Numerator   float32 `json:"numerator"`
+	Denominator float32 `json:"denominator"`
 }
 
-// Encode 编码
+// Encode encode split to io.Writer
 func (s Split) Encode(w io.Writer) error {
 	bw := bio.NewBinaryWriter(w)
 
@@ -51,7 +51,7 @@ func (s Split) Encode(w io.Writer) error {
 	return nil
 }
 
-// Decode 解码
+// Decode decode split from io.Reader
 func (s *Split) Decode(r io.Reader) error {
 	br := bio.NewBinaryReader(r)
 
@@ -91,7 +91,7 @@ func (s *Split) Decode(r io.Reader) error {
 	return nil
 }
 
-// Equal 是否相同
+// Equal check split is equal
 func (s Split) Equal(t Split) error {
 
 	if s.Enable != t.Enable {

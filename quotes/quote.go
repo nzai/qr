@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Quote 报价
+// Quote define stock quote
 type Quote struct {
 	Timestamp uint64
 	Open      float32
@@ -18,7 +18,7 @@ type Quote struct {
 	Volume    uint64
 }
 
-// Encode 编码
+// Encode encode quote to io.Writer
 func (q Quote) Encode(w io.Writer) error {
 	bw := bio.NewBinaryWriter(w)
 
@@ -61,7 +61,7 @@ func (q Quote) Encode(w io.Writer) error {
 	return nil
 }
 
-// Decode 解码
+// Decode decode quote from io.Reader
 func (q *Quote) Decode(r io.Reader) error {
 	br := bio.NewBinaryReader(r)
 
@@ -111,7 +111,7 @@ func (q *Quote) Decode(r io.Reader) error {
 	return nil
 }
 
-// Equal 是否相同
+// Equal check quote is equal
 func (q Quote) Equal(s Quote) error {
 
 	if q.Timestamp != s.Timestamp {

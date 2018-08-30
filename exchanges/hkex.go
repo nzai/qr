@@ -7,35 +7,35 @@ import (
 	"sort"
 	"time"
 
-	"github.com/nzai/go-utility/net"
+	"github.com/nzai/netop"
 	"github.com/nzai/qr/constants"
 	"github.com/nzai/qr/quotes"
 	"github.com/nzai/qr/sources"
 	"go.uber.org/zap"
 )
 
-// Hkex 香港证券交易所
+// Hkex define hongkong exchange
 type Hkex struct {
 	source sources.Source
 }
 
-// NewHkex 新建香港证券交易所
+// NewHkex create hongkong exchange
 func NewHkex() *Hkex {
 	return &Hkex{sources.NewYahooFinance()}
 }
 
-// Code 代码
+// Code get exchange code
 func (s Hkex) Code() string {
 	return "Hkex"
 }
 
-// Location 所处时区
+// Location get exchange location
 func (s Hkex) Location() *time.Location {
 	location, _ := time.LoadLocation("Asia/Hong_Kong")
 	return location
 }
 
-// Companies 上市公司
+// Companies get exchange companies
 func (s Hkex) Companies() ([]*quotes.Company, error) {
 
 	source := map[string]string{
@@ -58,16 +58,15 @@ func (s Hkex) Companies() ([]*quotes.Company, error) {
 		companies = append(companies, _companies...)
 	}
 
-	// 按Code排序
+	// sort companies by code
 	sort.Sort(quotes.CompanyList(companies))
 
 	return companies, nil
 }
 
-// queryCompanies 解析香港证券交易所上市公司
+// queryCompanies query companies of special category
 func (s Hkex) queryCompanies(page, api string) ([]*quotes.Company, error) {
-
-	body, err := net.DownloadStringRetry(page, constants.RetryCount, constants.RetryInterval)
+	body, err := netop.GetString(page, netop.Retry(constants.RetryCount, constants.RetryInterval))
 	if err != nil {
 		zap.L().Error("download hkex page failed", zap.Error(err), zap.String("url", page))
 		return nil, err
@@ -77,11 +76,11 @@ func (s Hkex) queryCompanies(page, api string) ([]*quotes.Company, error) {
 
 	matches := regexToken.FindStringSubmatch(body)
 	if len(matches) != 2 {
-		return nil, errors.New("获取token失败")
+		return nil, errors.New("get access token failed")
 	}
 
 	url := fmt.Sprintf(api, matches[1], time.Now().UnixNano())
-	body, err = net.DownloadStringRetry(url, constants.RetryCount, constants.RetryInterval)
+	body, err = netop.GetString(url, netop.Retry(constants.RetryCount, constants.RetryInterval))
 	if err != nil {
 		zap.L().Error("download hkex companies failed", zap.Error(err), zap.String("url", url), zap.String("token", matches[1]))
 		return nil, err
@@ -98,7 +97,7 @@ func (s Hkex) queryCompanies(page, api string) ([]*quotes.Company, error) {
 	return companies, nil
 }
 
-// Crawl 抓取
+// Crawl company daily quote
 func (s Hkex) Crawl(company *quotes.Company, date time.Time) (*quotes.DailyQuote, error) {
 	return s.source.Crawl(company, date, ".HK")
 }

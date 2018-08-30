@@ -10,17 +10,17 @@ import (
 	"go.uber.org/zap"
 )
 
-// Store 存储
+// Store define exchange daily quote store
 type Store interface {
-	// Exists 是否存在
+	// Exists check quote exists
 	Exists(exchanges.Exchange, time.Time) (bool, error)
-	// Save 保存
+	// Save save quote to dest path
 	Save(exchanges.Exchange, time.Time, quotes.Encoder) error
-	// Load 读取
+	// Load load quote from path
 	Load(exchanges.Exchange, time.Time, quotes.Decoder) error
 }
 
-// Parse 解析
+// Parse parse command argument
 func Parse(arg string) (Store, error) {
 	parts := strings.Split(arg, ":")
 	if len(parts) != 2 {

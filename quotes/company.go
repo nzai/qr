@@ -8,13 +8,13 @@ import (
 	"go.uber.org/zap"
 )
 
-// Company 公司
+// Company define company
 type Company struct {
-	Name string // 名称
-	Code string // 代码
+	Name string
+	Code string // symbol
 }
 
-// Encode 编码
+// Encode encode company to io.Writer
 func (c Company) Encode(w io.Writer) error {
 	bw := bio.NewBinaryWriter(w)
 
@@ -33,7 +33,7 @@ func (c Company) Encode(w io.Writer) error {
 	return nil
 }
 
-// Decode 解码
+// Decode decode company from io.Reader
 func (c *Company) Decode(r io.Reader) error {
 	br := bio.NewBinaryReader(r)
 
@@ -55,7 +55,7 @@ func (c *Company) Decode(r io.Reader) error {
 	return nil
 }
 
-// Equal 是否相同
+// Equal check company is equal
 func (c Company) Equal(s Company) error {
 
 	if c.Code != s.Code {
@@ -69,7 +69,7 @@ func (c Company) Equal(s Company) error {
 	return nil
 }
 
-// CompanyList 公司列表
+// CompanyList use for sort companies
 type CompanyList []*Company
 
 func (l CompanyList) Len() int {
@@ -82,7 +82,7 @@ func (l CompanyList) Less(i, j int) bool {
 	return l[i].Code < l[j].Code
 }
 
-// Encode 编码
+// Encode encode company list to io.Writer
 func (l CompanyList) Encode(w io.Writer) error {
 	bw := bio.NewBinaryWriter(w)
 
@@ -103,7 +103,7 @@ func (l CompanyList) Encode(w io.Writer) error {
 	return nil
 }
 
-// Decode 解码
+// Decode decode company list from io.Reader
 func (l *CompanyList) Decode(r io.Reader) error {
 	br := bio.NewBinaryReader(r)
 

@@ -7,60 +7,58 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nzai/go-utility/net"
+	"github.com/nzai/netop"
 	"github.com/nzai/qr/constants"
 	"github.com/nzai/qr/quotes"
 	"github.com/nzai/qr/sources"
 	"go.uber.org/zap"
 )
 
-// Nyse 纽约证券交易所
+// Nyse define new york stock exchange
 type Nyse struct {
 	source sources.Source
 }
 
-// NewNyse 新建纽约证券交易所
+// NewNyse create new york stock exchange
 func NewNyse() *Nyse {
 	return &Nyse{sources.NewYahooFinance()}
 }
 
-// Code 代码
+// Code get exchange code
 func (s Nyse) Code() string {
 	return "Nyse"
 }
 
-// Location 所处时区
+// Location get exchange location
 func (s Nyse) Location() *time.Location {
 	location, _ := time.LoadLocation("America/New_York")
 	return location
 }
 
-// Companies 上市公司
+// Companies get exchange companies
 func (s Nyse) Companies() ([]*quotes.Company, error) {
-
 	url := "http://www.nasdaq.com/screening/companies-by-industry.aspx?exchange=NYSE&render=download"
 
-	//	尝试从网络获取实时上市公司列表
-	csv, err := net.DownloadStringRetry(url, constants.RetryCount, constants.RetryInterval)
+	// download csv from nasdaq
+	csv, err := netop.GetString(url, netop.Retry(constants.RetryCount, constants.RetryInterval))
 	if err != nil {
 		zap.L().Error("download nyse companies failed", zap.Error(err), zap.String("url", url))
 		return nil, err
 	}
 
-	// 解析CSV
 	companies, err := s.parseCSV(csv)
 	if err != nil {
 		zap.L().Error("parse csv failed", zap.Error(err), zap.String("csv", csv))
 		return nil, err
 	}
 
-	// 按Code排序
+	// sort companies by code
 	sort.Sort(quotes.CompanyList(companies))
 
 	return companies, nil
 }
 
-// parseCSV 解析CSV
+// parseCSV parse result csv
 func (s Nyse) parseCSV(content string) ([]*quotes.Company, error) {
 
 	reader := csv.NewReader(strings.NewReader(content))
@@ -82,7 +80,7 @@ func (s Nyse) parseCSV(content string) ([]*quotes.Company, error) {
 			continue
 		}
 
-		//	去重
+		// remove duplicated
 		if _, found := dict[parts[0]]; found {
 			continue
 		}
@@ -97,7 +95,7 @@ func (s Nyse) parseCSV(content string) ([]*quotes.Company, error) {
 	return companies, nil
 }
 
-// Crawl 抓取
+// Crawl company daily quote
 func (s Nyse) Crawl(company *quotes.Company, date time.Time) (*quotes.DailyQuote, error) {
 	return s.source.Crawl(company, date, "")
 }

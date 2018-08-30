@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// ExchangeDailyQuote 交易所每日报价
+// ExchangeDailyQuote define exchange daily quote
 type ExchangeDailyQuote struct {
 	Version   uint8
 	Exchange  string
@@ -18,7 +18,7 @@ type ExchangeDailyQuote struct {
 	Quotes    map[string]*DailyQuote
 }
 
-// Encode 编码
+// Encode encode exchange daily quote to io.Writer
 func (q ExchangeDailyQuote) Encode(w io.Writer) error {
 	bw := bio.NewBinaryWriter(w)
 
@@ -65,7 +65,7 @@ func (q ExchangeDailyQuote) Encode(w io.Writer) error {
 	return nil
 }
 
-// Decode 解码
+// Decode decode exchange daily quote from io.Reader
 func (q *ExchangeDailyQuote) Decode(r io.Reader) error {
 	br := bio.NewBinaryReader(r)
 
@@ -113,7 +113,7 @@ func (q *ExchangeDailyQuote) Decode(r io.Reader) error {
 	return nil
 }
 
-// Equal 是否相同
+// Equal check exchange daily quote is equal
 func (q ExchangeDailyQuote) Equal(s ExchangeDailyQuote) error {
 
 	if q.Version != s.Version {
@@ -163,14 +163,14 @@ func (q ExchangeDailyQuote) Equal(s ExchangeDailyQuote) error {
 	return nil
 }
 
-// DailyQuote 每日报价
+// DailyQuote define company daily quote
 type DailyQuote struct {
 	Pre     *Serial
 	Regular *Serial
 	Post    *Serial
 }
 
-// Encode 编码
+// Encode encode company daily quote to io.Writer
 func (q DailyQuote) Encode(w io.Writer) error {
 	bw := bio.NewBinaryWriter(w)
 
@@ -195,7 +195,7 @@ func (q DailyQuote) Encode(w io.Writer) error {
 	return nil
 }
 
-// Decode 解码
+// Decode decode company daily quote from io.Reader
 func (q *DailyQuote) Decode(r io.Reader) error {
 	br := bio.NewBinaryReader(r)
 
@@ -227,7 +227,7 @@ func (q *DailyQuote) Decode(r io.Reader) error {
 	return nil
 }
 
-// Equal 是否相同
+// Equal check company daily quote is equal
 func (q DailyQuote) Equal(s DailyQuote) error {
 
 	err := q.Pre.Equal(*s.Pre)

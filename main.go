@@ -2,9 +2,10 @@ package main
 
 import (
 	"flag"
-	"github.com/nzai/qr/sources"
 	"os"
 	"time"
+
+	"github.com/nzai/qr/sources"
 
 	"github.com/nzai/qr/exchanges"
 	"github.com/nzai/qr/schedulers"
@@ -15,7 +16,7 @@ import (
 
 var (
 	startDate        = time.Now().AddDate(0, 0, -60) // yahoo finance limit
-	storeArgument    = flag.String("s", "fs|/data", "store type: fs")
+	storeArgument    = flag.String("s", "fs:/data", "store type: eg fs")
 	exchangeArgument = flag.String("e", "Nyse", "exchange: eg Nyse,Nasdaq")
 )
 
@@ -47,7 +48,7 @@ func main() {
 	wg.Wait()
 }
 
-// newLogger 新建日志
+// newLogger create new zap logger
 func newLogger() *zap.Logger {
 
 	infoPriority := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {

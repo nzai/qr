@@ -7,60 +7,59 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nzai/go-utility/net"
+	"github.com/nzai/netop"
 	"github.com/nzai/qr/constants"
 	"github.com/nzai/qr/quotes"
 	"github.com/nzai/qr/sources"
 	"go.uber.org/zap"
 )
 
-// Nasdaq 纳斯达克
+// Nasdaq define nasdaq exchange
 type Nasdaq struct {
 	source sources.Source
 }
 
-// NewNasdaq 新建纳斯达克
+// NewNasdaq create nasdaq exchange
 func NewNasdaq() *Nasdaq {
 	return &Nasdaq{sources.NewYahooFinance()}
 }
 
-// Code 代码
+// Code get exchange code
 func (s Nasdaq) Code() string {
 	return "Nasdaq"
 }
 
-// Location 所处时区
+// Location get exchange location
 func (s Nasdaq) Location() *time.Location {
 	location, _ := time.LoadLocation("America/New_York")
 	return location
 }
 
-// Companies 上市公司
+// Companies get exchange companies
 func (s Nasdaq) Companies() ([]*quotes.Company, error) {
 
 	url := "http://www.nasdaq.com/screening/companies-by-industry.aspx?exchange=NASDAQ&render=download"
 
-	//	尝试从网络获取实时上市公司列表
-	csv, err := net.DownloadStringRetry(url, constants.RetryCount, constants.RetryInterval)
+	// download csv from nasdaq
+	csv, err := netop.GetString(url, netop.Retry(constants.RetryCount, constants.RetryInterval))
 	if err != nil {
 		zap.L().Error("download nasdaq companies failed", zap.Error(err), zap.String("url", url))
 		return nil, err
 	}
 
-	// 解析CSV
 	companies, err := s.parseCSV(csv)
 	if err != nil {
 		zap.L().Error("parse csv failed", zap.Error(err), zap.String("csv", csv))
 		return nil, err
 	}
 
-	// 按Code排序
+	// sort companies by code
 	sort.Sort(quotes.CompanyList(companies))
 
 	return companies, nil
 }
 
-// parseCSV 解析CSV
+// parseCSV parse result csv
 func (s Nasdaq) parseCSV(content string) ([]*quotes.Company, error) {
 
 	reader := csv.NewReader(strings.NewReader(content))
@@ -97,7 +96,7 @@ func (s Nasdaq) parseCSV(content string) ([]*quotes.Company, error) {
 	return companies, nil
 }
 
-// Crawl 抓取
+// Crawl company daily quote
 func (s Nasdaq) Crawl(company *quotes.Company, date time.Time) (*quotes.DailyQuote, error) {
 	return s.source.Crawl(company, date, "")
 }

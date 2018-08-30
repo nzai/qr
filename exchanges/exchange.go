@@ -8,7 +8,7 @@ import (
 	"github.com/nzai/qr/quotes"
 )
 
-// Exchange 交易所
+// Exchange define exchanges
 type Exchange interface {
 	Code() string
 	Location() *time.Location
@@ -25,13 +25,13 @@ var dict = map[string]Exchange{
 	"Hkex":   NewHkex(),
 }
 
-// Get 获取code对应的交易所
+// Get get exchange by code
 func Get(code string) (Exchange, bool) {
 	exchange, found := dict[code]
 	return exchange, found
 }
 
-// Parse 解析
+// Parse parse command argument
 func Parse(arg string) ([]Exchange, error) {
 	parts := strings.Split(arg, ",")
 	if len(parts) == 0 {

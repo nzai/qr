@@ -7,69 +7,68 @@ import (
 	"time"
 
 	"github.com/guotie/gogb2312"
-	"github.com/nzai/go-utility/net"
+	"github.com/nzai/netop"
 	"github.com/nzai/qr/constants"
 	"github.com/nzai/qr/quotes"
 	"github.com/nzai/qr/sources"
 	"go.uber.org/zap"
 )
 
-// Szse 深圳证券交易所
+// Szse define shenzhen stock exchange
 type Szse struct {
 	source sources.Source
 }
 
-// NewSzse 新建深圳证券交易所
+// NewSzse create shenzhen stock exchange
 func NewSzse() *Szse {
 	return &Szse{source: sources.NewYahooFinance()}
 }
 
-// Code 代码
+// Code get exchange code
 func (s Szse) Code() string {
 	return "Szse"
 }
 
-// Location 所处时区
+// Location get exchange location
 func (s Szse) Location() *time.Location {
 	location, _ := time.LoadLocation("Asia/Shanghai")
 	return location
 }
 
-// Companies 上市公司
+// Companies get exchange companies
 func (s Szse) Companies() ([]*quotes.Company, error) {
 
 	url := "http://www.szse.cn/szseWeb/ShowReport.szse?SHOWTYPE=EXCEL&CATALOGID=1110&tab1PAGENUM=1&ENCODE=1&TABKEY=tab1"
 
-	// 尝试从网络获取实时上市公司列表
-	html, err := net.DownloadStringRetry(url, constants.RetryCount, constants.RetryInterval)
+	// download html from sse
+	html, err := netop.GetString(url, netop.Retry(constants.RetryCount, constants.RetryInterval))
 	if err != nil {
 		zap.L().Error("download szse companies failed", zap.Error(err), zap.String("url", url))
 		return nil, err
 	}
 
-	// 深圳证券交易所的查询结果是GBK编码的，需要转成UTF8
+	// encode html from gb2312 to utf-8
 	html, err, _, _ = gogb2312.ConvertGB2312String(html)
 	if err != nil {
 		return nil, err
 	}
 
-	// 解析
 	companies, err := s.parse(html)
 	if err != nil {
 		zap.L().Error("parse failed", zap.Error(err), zap.String("html", html))
 		return nil, err
 	}
 
-	// 按Code排序
+	// sort companies by code
 	sort.Sort(quotes.CompanyList(companies))
 
 	return companies, nil
 }
 
-// parse 解析
+// parse parse result html
 func (s Szse) parse(html string) ([]*quotes.Company, error) {
 
-	//  使用正则分析html
+	// match by regex
 	regex := regexp.MustCompile(`\' ><td  align='center'  >(\d{6})</td><td  align='center'  >([^<]*?)</td>`)
 	group := regex.FindAllStringSubmatch(html, -1)
 
@@ -85,8 +84,7 @@ func (s Szse) parse(html string) ([]*quotes.Company, error) {
 	return companies, nil
 }
 
-// Crawl 抓取
+// Crawl company daily quote
 func (s Szse) Crawl(company *quotes.Company, date time.Time) (*quotes.DailyQuote, error) {
-	// 分时数据从雅虎抓取
 	return s.source.Crawl(company, date, ".SZ")
 }

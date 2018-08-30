@@ -6,13 +6,13 @@ import (
 	"github.com/nzai/qr/quotes"
 )
 
-// Source 数据源
+// Source define company daily quote source
 type Source interface {
-	// 获取公司每日报价
+	// Crawl company daily quote
 	Crawl(*quotes.Company, time.Time, string) (*quotes.DailyQuote, error)
 }
 
-// SplitDividendSource 查询拆股和除权的数据源
+// SplitDividendSource define company daily split and dividend source
 type SplitDividendSource interface {
 	QuerySplitAndDividend(*quotes.Company, time.Time) (*quotes.Dividend, *quotes.Split, error)
 }

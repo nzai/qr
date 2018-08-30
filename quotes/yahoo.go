@@ -7,13 +7,13 @@ import (
 )
 
 var (
-	// YahooNotFoundCode 雅虎发现未知股票时的错误码
+	// YahooNotFoundCode define errors raised by yahoo finace on code not found
 	YahooNotFoundCode = "Not Found"
-	// ErrYahooSymbolNotFound 雅虎未知的股票(符号)错误
+	// ErrYahooSymbolNotFound define errors raised by yahoo finace on symblo not found
 	ErrYahooSymbolNotFound = errors.New("symbol not foud")
 )
 
-// YahooQuote 雅虎财经返回的json
+// YahooQuote define yahoo finace response structure
 type YahooQuote struct {
 	Chart struct {
 		Result []struct {
@@ -62,9 +62,9 @@ type YahooQuote struct {
 	} `json:"chart"`
 }
 
-// Validate 校验
+// Validate validate response is valid
 func (q YahooQuote) Validate() error {
-	// 有错
+	// yahoo error
 	if q.Chart.Err != nil {
 		if q.Chart.Err.Code == YahooNotFoundCode {
 			return ErrYahooSymbolNotFound
@@ -72,12 +72,10 @@ func (q YahooQuote) Validate() error {
 		return errors.New(q.Chart.Err.Description)
 	}
 
-	// Result为空
 	if q.Chart.Result == nil || len(q.Chart.Result) == 0 {
 		return errors.New("quote.Chart.Result is null")
 	}
 
-	// Quotes为空
 	if q.Chart.Result[0].Indicators.Quotes == nil || len(q.Chart.Result[0].Indicators.Quotes) == 0 {
 		return errors.New("quote.Chart.Result[0].Indicators.Quotes is null")
 	}
@@ -86,19 +84,17 @@ func (q YahooQuote) Validate() error {
 		zap.L().Warn("dividends count > 1",
 			zap.Int("count", len(q.Chart.Result[0].Events.Dividends)),
 			zap.Any("dividends", q.Chart.Result[0].Events.Dividends))
-		// return fmt.Errorf("dividents count %d > 1", len(q.Chart.Result[0].Events.Dividends))
 	}
 
 	if len(q.Chart.Result[0].Events.Splits) > 1 {
 		zap.L().Warn("splits count > 1",
 			zap.Int("count", len(q.Chart.Result[0].Events.Splits)),
 			zap.Any("splits", q.Chart.Result[0].Events.Splits))
-		// return fmt.Errorf("splits count %d > 1", len(q.Chart.Result[0].Events.Splits))
 	}
 
 	result, _quote := q.Chart.Result[0], q.Chart.Result[0].Indicators.Quotes[0]
 
-	// Quotes数量不正确
+	// quotes count mismatch
 	if len(result.Timestamp) != len(_quote.Open) ||
 		len(result.Timestamp) != len(_quote.Close) ||
 		len(result.Timestamp) != len(_quote.High) ||
@@ -110,7 +106,7 @@ func (q YahooQuote) Validate() error {
 	return nil
 }
 
-// ToCompanyDailyQuote 转换为公司每日报价
+// ToCompanyDailyQuote convert yahoo finance response to company daily quote
 func (q YahooQuote) ToCompanyDailyQuote(start, end uint64) *DailyQuote {
 
 	dq := &DailyQuote{
@@ -122,8 +118,7 @@ func (q YahooQuote) ToCompanyDailyQuote(start, end uint64) *DailyQuote {
 	tp := q.Chart.Result[0].Meta.TradingPeriods
 	qs := q.Chart.Result[0].Indicators.Quotes[0]
 	for index, ts := range q.Chart.Result[0].Timestamp {
-
-		//	如果全为0就忽略
+		// ignore all zero quote
 		if qs.Open[index] == 0 && qs.Close[index] == 0 && qs.High[index] == 0 && qs.Low[index] == 0 && qs.Volume[index] == 0 {
 			continue
 		}
@@ -152,7 +147,7 @@ func (q YahooQuote) ToCompanyDailyQuote(start, end uint64) *DailyQuote {
 	return dq
 }
 
-// YahooPeroid 时间段
+// YahooPeroid define trading peroid
 type YahooPeroid struct {
 	Timezone  string `json:"timezone"`
 	Start     uint64 `json:"start"`
@@ -160,13 +155,13 @@ type YahooPeroid struct {
 	GMTOffset int64  `json:"gmtoffset"`
 }
 
-// YahooDividend 股息
+// YahooDividend define stock dividend
 type YahooDividend struct {
 	Amount float32 `json:"amount"`
 	Date   uint64  `json:"date"`
 }
 
-// YahooSplits 拆股
+// YahooSplits define stock split
 type YahooSplits struct {
 	Date        uint64 `json:"date"`
 	Numerator   uint32 `json:"numerator"`

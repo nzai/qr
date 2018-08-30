@@ -12,14 +12,14 @@ import (
 	"go.uber.org/zap"
 )
 
-// Scheduler 调度器
+// Scheduler define a crawl scheduler
 type Scheduler struct {
 	source    sources.Source
 	store     stores.Store
 	exchanges []exchanges.Exchange
 }
 
-// NewScheduler 新建调度器
+// NewScheduler create crawl scheduler
 func NewScheduler(source sources.Source, store stores.Store, exchanges ...exchanges.Exchange) *Scheduler {
 
 	return &Scheduler{
@@ -29,7 +29,7 @@ func NewScheduler(source sources.Source, store stores.Store, exchanges ...exchan
 	}
 }
 
-// Run 运行
+// Run start jobs
 func (s Scheduler) Run(start time.Time) *sync.WaitGroup {
 	wg := new(sync.WaitGroup)
 
@@ -57,7 +57,7 @@ func (s Scheduler) tomorrowZero(now time.Time) time.Time {
 	return s.todayZero(now).AddDate(0, 0, 1)
 }
 
-// historyJob 抓取历史数据任务
+// historyJob crawl exchange history quotes
 func (s Scheduler) historyJob(wg *sync.WaitGroup, exchange exchanges.Exchange, start time.Time) {
 
 	yesterday := s.todayZero(time.Now().In(exchange.Location()))
@@ -97,7 +97,7 @@ func (s Scheduler) historyJob(wg *sync.WaitGroup, exchange exchanges.Exchange, s
 		zap.Time("end", yesterday))
 }
 
-// dailyJob 抓取每日数据任务
+// dailyJob crawl exchange daily qoutes
 func (s Scheduler) dailyJob(wg *sync.WaitGroup, exchange exchanges.Exchange) {
 	now := time.Now().In(exchange.Location())
 	duration2Tomorrow := s.tomorrowZero(now).Sub(now)
@@ -134,7 +134,7 @@ func (s Scheduler) dailyJob(wg *sync.WaitGroup, exchange exchanges.Exchange) {
 	}
 }
 
-// Record 记录一天的报价
+// Record crawl exchange quotes in special days
 func (s Scheduler) crawl(exchange exchanges.Exchange, dates ...time.Time) error {
 	// get companies
 	companies, err := exchange.Companies()
@@ -187,7 +187,7 @@ func (s Scheduler) crawl(exchange exchanges.Exchange, dates ...time.Time) error 
 	return nil
 }
 
-// crawl 抓取指定日期的市场报价
+// crawl crawl company quotes in special day
 func (s Scheduler) crawlCompaniesDailyQuote(exchange exchanges.Exchange, companies []*quotes.Company, date time.Time) (map[string]*quotes.DailyQuote, error) {
 
 	ch := make(chan bool, constants.DefaultParallel)

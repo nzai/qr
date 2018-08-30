@@ -7,35 +7,35 @@ import (
 	"time"
 
 	"github.com/guotie/gogb2312"
-	"github.com/nzai/go-utility/net"
+	"github.com/nzai/netop"
 	"github.com/nzai/qr/constants"
 	"github.com/nzai/qr/quotes"
 	"github.com/nzai/qr/sources"
 	"go.uber.org/zap"
 )
 
-// Sse 上海证券交易所
+// Sse define shanghai stock exchange
 type Sse struct {
 	source sources.Source
 }
 
-// NewSse 新建上海证券交易所
+// NewSse create shanghai stock exchange
 func NewSse() *Sse {
 	return &Sse{source: sources.NewYahooFinance()}
 }
 
-// Code 代码
+// Code get exchange code
 func (s Sse) Code() string {
 	return "Sse"
 }
 
-// Location 所处时区
+// Location get exchange location
 func (s Sse) Location() *time.Location {
 	location, _ := time.LoadLocation("Asia/Shanghai")
 	return location
 }
 
-// Companies 上市公司
+// Companies get exchange companies
 func (s Sse) Companies() ([]*quotes.Company, error) {
 
 	urls := []string{
@@ -47,14 +47,13 @@ func (s Sse) Companies() ([]*quotes.Company, error) {
 	var list []*quotes.Company
 	for _, url := range urls {
 
-		//	尝试从网络获取实时上市公司列表
-		text, err := net.DownloadStringRefererRetry(url, referer, constants.RetryCount, constants.RetryInterval)
+		// download html from sse
+		text, err := netop.GetString(url, netop.Refer(referer), netop.Retry(constants.RetryCount, constants.RetryInterval))
 		if err != nil {
 			zap.L().Error("download sse companies failed", zap.Error(err), zap.String("url", url))
 			return nil, err
 		}
 
-		// 解析
 		companies, err := s.parse(text)
 		if err != nil {
 			zap.L().Error("parse failed", zap.Error(err), zap.String("text", text))
@@ -64,23 +63,23 @@ func (s Sse) Companies() ([]*quotes.Company, error) {
 		list = append(list, companies...)
 	}
 
-	// 按Code排序
+	// sort companies by code
 	sort.Sort(quotes.CompanyList(list))
 
 	return list, nil
 }
 
-// parse 解析
+// parse parse result html
 func (s Sse) parse(text string) ([]*quotes.Company, error) {
 
-	//	深圳证券交易所的查询结果是GBK编码的，需要转成UTF8
+	// encode html from gb2312 to utf-8
 	converted, err, _, _ := gogb2312.ConvertGB2312String(text)
 	if err != nil {
 		zap.L().Error("convert gb2312 failed", zap.Error(err))
 		return nil, err
 	}
 
-	//  使用正则分析json
+	// match by regex
 	regex := regexp.MustCompile(`(\d{6})	  (\S+)	  \d{6}	  \S+`)
 	group := regex.FindAllStringSubmatch(converted, -1)
 
@@ -96,8 +95,7 @@ func (s Sse) parse(text string) ([]*quotes.Company, error) {
 	return companies, nil
 }
 
-// Crawl 抓取
+// Crawl company daily quote
 func (s Sse) Crawl(company *quotes.Company, date time.Time) (*quotes.DailyQuote, error) {
-	// 分时数据从雅虎抓取
 	return s.source.Crawl(company, date, ".SS")
 }

@@ -8,15 +8,15 @@ import (
 	"go.uber.org/zap"
 )
 
-// SerialType 报价序列类型
+// SerialType define quotes type
 type SerialType int
 
 const (
-	// SerialTypePre 盘前
+	// SerialTypePre before trading peroid
 	SerialTypePre SerialType = iota + 1
-	// SerialTypeRegular 盘中
+	// SerialTypeRegular in the trading peroid
 	SerialTypeRegular
-	// SerialTypePost 盘后
+	// SerialTypePost after trading peroid
 	SerialTypePost
 )
 
@@ -33,10 +33,10 @@ func (t SerialType) String() string {
 	}
 }
 
-// Serial 报价序列
+// Serial define quotes
 type Serial []Quote
 
-// Encode 编码
+// Encode encode quotes to io.Writer
 func (s Serial) Encode(w io.Writer) error {
 	bw := bio.NewBinaryWriter(w)
 
@@ -57,7 +57,7 @@ func (s Serial) Encode(w io.Writer) error {
 	return nil
 }
 
-// Decode 解码
+// Decode decode quotes from io.Reader
 func (s *Serial) Decode(r io.Reader) error {
 	br := bio.NewBinaryReader(r)
 
@@ -80,7 +80,7 @@ func (s *Serial) Decode(r io.Reader) error {
 	return nil
 }
 
-// Equal 是否相同
+// Equal check quotes is equal
 func (s Serial) Equal(q Serial) error {
 
 	if len(s) != len(q) {
@@ -108,7 +108,7 @@ func (s Serial) Less(i, j int) bool {
 	return s[i].Timestamp < s[j].Timestamp
 }
 
-// Rollup 汇总
+// Rollup rollup quotes to a summary
 func (s Serial) Rollup() *Quote {
 
 	if len(s) == 0 {
