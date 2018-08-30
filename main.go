@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	startDate        = time.Now().AddDate(0, 0, -60) // yahoo finance limit
+	startDate        = time.Now().AddDate(0, 0, -7) // yahoo finance limit
 	storeArgument    = flag.String("s", "fs:/data", "store type: eg fs")
 	exchangeArgument = flag.String("e", "Nyse", "exchange: eg Nyse,Nasdaq")
 )
