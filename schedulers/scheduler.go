@@ -186,7 +186,9 @@ func (s Scheduler) crawl(exchange exchanges.Exchange, dates ...time.Time) error 
 		zap.L().Info("save exchange daily quote success",
 			zap.Error(err),
 			zap.String("exchange", exchange.Code()),
-			zap.Time("date", date))
+			zap.Time("date", date),
+			zap.Int("total companies", len(companies)),
+			zap.Int("valid companies", len(dailyQuotes)))
 	}
 
 	return nil
