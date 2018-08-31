@@ -107,9 +107,9 @@ func (q YahooQuote) Validate() error {
 }
 
 // ToCompanyDailyQuote convert yahoo finance response to company daily quote
-func (q YahooQuote) ToCompanyDailyQuote(start, end uint64) *DailyQuote {
-
+func (q YahooQuote) ToCompanyDailyQuote(company *Company, start, end uint64) *DailyQuote {
 	dq := &DailyQuote{
+		Company: company,
 		Pre:     new(Serial),
 		Regular: new(Serial),
 		Post:    new(Serial),

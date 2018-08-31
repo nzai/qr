@@ -7,23 +7,19 @@ import (
 	"github.com/nzai/qr/constants"
 	"github.com/nzai/qr/exchanges"
 	"github.com/nzai/qr/quotes"
-	"github.com/nzai/qr/sources"
 	"github.com/nzai/qr/stores"
 	"go.uber.org/zap"
 )
 
 // Scheduler define a crawl scheduler
 type Scheduler struct {
-	source    sources.Source
 	store     stores.Store
 	exchanges []exchanges.Exchange
 }
 
 // NewScheduler create crawl scheduler
-func NewScheduler(source sources.Source, store stores.Store, exchanges ...exchanges.Exchange) *Scheduler {
-
+func NewScheduler(store stores.Store, exchanges ...exchanges.Exchange) *Scheduler {
 	return &Scheduler{
-		source:    source,
 		store:     store,
 		exchanges: exchanges,
 	}
@@ -59,28 +55,27 @@ func (s Scheduler) tomorrowZero(now time.Time) time.Time {
 
 // historyJob crawl exchange history quotes
 func (s Scheduler) historyJob(wg *sync.WaitGroup, exchange exchanges.Exchange, start time.Time) {
-
-	yesterday := s.todayZero(time.Now().In(exchange.Location()))
+	// fix start time
+	start = s.todayZero(start.In(exchange.Location()))
+	end := s.todayZero(time.Now().In(exchange.Location())).AddDate(0, 0, -1)
 	zap.L().Info("exchange history job start",
 		zap.String("exchange", exchange.Code()),
 		zap.Time("start", start),
-		zap.Time("end", yesterday))
+		zap.Time("end", end))
 
 	var dates []time.Time
-	for yesterday.After(start) {
-		exists, err := s.store.Exists(exchange, start)
+	for date := start; !date.Before(end); date = date.AddDate(0, 0, 1) {
+		exists, err := s.store.Exists(exchange, date)
 		if err != nil {
 			zap.L().Error("check exchange daily quote exists failed",
 				zap.Error(err),
 				zap.String("exchange", exchange.Code()),
-				zap.Time("date", start))
+				zap.Time("date", date))
 		} else {
 			if !exists {
-				dates = append(dates, start)
+				dates = append(dates, date)
 			}
 		}
-
-		start = start.AddDate(0, 0, 1)
 	}
 
 	err := s.crawl(exchange, dates...)
@@ -94,7 +89,7 @@ func (s Scheduler) historyJob(wg *sync.WaitGroup, exchange exchanges.Exchange, s
 	zap.L().Info("exchange history job success",
 		zap.String("exchange", exchange.Code()),
 		zap.Time("start", start),
-		zap.Time("end", yesterday))
+		zap.Time("end", end))
 }
 
 // dailyJob crawl exchange daily qoutes
@@ -134,7 +129,7 @@ func (s Scheduler) dailyJob(wg *sync.WaitGroup, exchange exchanges.Exchange) {
 	}
 }
 
-// Record crawl exchange quotes in special days
+// crawl crawl exchange quotes in special days
 func (s Scheduler) crawl(exchange exchanges.Exchange, dates ...time.Time) error {
 	// get companies
 	companies, err := exchange.Companies()
@@ -150,51 +145,95 @@ func (s Scheduler) crawl(exchange exchanges.Exchange, dates ...time.Time) error 
 		zap.Int("companies", len(companies)))
 
 	for _, date := range dates {
-		// crawl
-		dailyQuotes, err := s.crawlCompaniesDailyQuote(exchange, companies, date)
+		err = s.crawlOneDay(exchange, companies, date)
 		if err != nil {
-			zap.L().Error("get exchange companies failed",
+			zap.L().Error("crawl exchange companies failed",
 				zap.Error(err),
 				zap.String("exchange", exchange.Code()),
 				zap.Time("date", date))
 			return err
 		}
-
-		companyDict := make(map[string]*quotes.Company, len(companies))
-		for _, company := range companies {
-			companyDict[company.Code] = company
-		}
-
-		edq := &quotes.ExchangeDailyQuote{
-			Version:   1,
-			Exchange:  exchange.Code(),
-			Date:      date,
-			Companies: companyDict,
-			Quotes:    dailyQuotes,
-		}
-
-		// save
-		err = s.store.Save(exchange, date, edq)
-		if err != nil {
-			zap.L().Error("save exchange daily quote failed",
-				zap.Error(err),
-				zap.String("exchange", exchange.Code()),
-				zap.Time("date", date))
-			return err
-		}
-
-		zap.L().Info("save exchange daily quote success",
-			zap.Error(err),
-			zap.String("exchange", exchange.Code()),
-			zap.Time("date", date),
-			zap.Int("total companies", len(companies)),
-			zap.Int("valid companies", len(dailyQuotes)))
 	}
 
 	return nil
 }
 
-// crawl crawl company quotes in special day
+// crawlOneDay crawl exchange quotes in special day
+func (s Scheduler) crawlOneDay(exchange exchanges.Exchange, companies []*quotes.Company, date time.Time) error {
+	// crawl
+	dailyQuotes, err := s.crawlCompaniesDailyQuote(exchange, companies, date)
+	if err != nil {
+		zap.L().Error("get exchange company quotes failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Time("date", date))
+		return err
+	}
+
+	companyDict := make(map[string]*quotes.Company, len(companies))
+	for _, company := range companies {
+		companyDict[company.Code] = company
+	}
+
+	edq := &quotes.ExchangeDailyQuote{
+		Version:   1,
+		Exchange:  exchange.Code(),
+		Date:      date,
+		Companies: companyDict,
+		Quotes:    dailyQuotes,
+	}
+
+	// save
+	err = s.store.Save(exchange, date, edq)
+	if err != nil {
+		zap.L().Error("save exchange daily quote failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Time("date", date))
+		return err
+	}
+
+	// valid
+	saved := new(quotes.ExchangeDailyQuote)
+	err = s.store.Load(exchange, date, saved)
+	if err != nil {
+		zap.L().Error("load exchange daily quote failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Time("date", date))
+		return err
+	}
+
+	// compare current with saved
+	err = edq.Equal(*saved)
+	if err != nil {
+		zap.L().Error("current quote is different from saved",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Time("date", date))
+
+		err1 := s.store.Remove(exchange, date)
+		if err1 != nil {
+			zap.L().Error("remove invalid quote failed",
+				zap.Error(err1),
+				zap.String("exchange", exchange.Code()),
+				zap.Time("date", date))
+		}
+
+		return err
+	}
+
+	zap.L().Info("save exchange daily quote success",
+		zap.Error(err),
+		zap.String("exchange", exchange.Code()),
+		zap.Time("date", date),
+		zap.Int("total companies", len(companies)),
+		zap.Int("valid companies", len(dailyQuotes)))
+
+	return nil
+}
+
+// crawlCompaniesDailyQuote crawl company quotes in special day
 func (s Scheduler) crawlCompaniesDailyQuote(exchange exchanges.Exchange, companies []*quotes.Company, date time.Time) (map[string]*quotes.DailyQuote, error) {
 
 	ch := make(chan bool, constants.DefaultParallel)

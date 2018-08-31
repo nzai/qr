@@ -82,6 +82,10 @@ func (s FileSystem) Save(exchange exchanges.Exchange, date time.Time, encoder qu
 	// read zipped bytes
 	zipped, err := ioutil.ReadAll(buffer)
 	if err != nil {
+		zap.L().Error("read zippped bytes failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Time("date", date))
 		return err
 	}
 
@@ -141,6 +145,27 @@ func (s FileSystem) Load(exchange exchanges.Exchange, date time.Time, decoder qu
 			zap.Error(err),
 			zap.String("exchange", exchange.Code()),
 			zap.Time("date", date))
+		return err
+	}
+
+	return nil
+}
+
+// Remove remove exchange daily quote
+func (s FileSystem) Remove(exchange exchanges.Exchange, date time.Time) error {
+	exists, _ := s.Exists(exchange, date)
+	if !exists {
+		return nil
+	}
+
+	filePath := s.storePath(exchange, date)
+	err := os.Remove(filePath)
+	if err != nil {
+		zap.L().Error("remove quote file failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Time("date", date),
+			zap.String("path", filePath))
 		return err
 	}
 

@@ -79,5 +79,5 @@ func (yahoo YahooFinance) Crawl(company *quotes.Company, date time.Time, suffix 
 		return nil, err
 	}
 
-	return quote.ToCompanyDailyQuote(uint64(date.Unix()), uint64(tomorrow.Unix())), nil
+	return quote.ToCompanyDailyQuote(company, uint64(date.Unix()), uint64(tomorrow.Unix())), nil
 }

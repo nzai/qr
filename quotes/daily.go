@@ -54,6 +54,12 @@ func (q ExchangeDailyQuote) Encode(w io.Writer) error {
 		}
 	}
 
+	_, err = bw.Int(len(q.Quotes))
+	if err != nil {
+		zap.L().Error("encode quotes count failed", zap.Error(err), zap.Int("count", len(q.Quotes)))
+		return err
+	}
+
 	for companyCode, dailyQuote := range q.Quotes {
 		err = dailyQuote.Encode(bw)
 		if err != nil {
@@ -105,10 +111,29 @@ func (q *ExchangeDailyQuote) Decode(r io.Reader) error {
 		companies[company.Code] = company
 	}
 
+	count, err = br.Int()
+	if err != nil {
+		zap.L().Error("decode quotes count failed", zap.Error(err))
+		return err
+	}
+
+	dailyQuotes := make(map[string]*DailyQuote, count)
+	for index := 0; index < count; index++ {
+		dailyQuote := new(DailyQuote)
+		err = dailyQuote.Decode(br)
+		if err != nil {
+			zap.L().Error("decode daily quote failed", zap.Error(err))
+			return err
+		}
+
+		dailyQuotes[dailyQuote.Company.Code] = dailyQuote
+	}
+
 	q.Version = version
 	q.Exchange = exchange
 	q.Date = date
 	q.Companies = companies
+	q.Quotes = dailyQuotes
 
 	return nil
 }
@@ -165,6 +190,7 @@ func (q ExchangeDailyQuote) Equal(s ExchangeDailyQuote) error {
 
 // DailyQuote define company daily quote
 type DailyQuote struct {
+	Company *Company
 	Pre     *Serial
 	Regular *Serial
 	Post    *Serial
@@ -174,7 +200,13 @@ type DailyQuote struct {
 func (q DailyQuote) Encode(w io.Writer) error {
 	bw := bio.NewBinaryWriter(w)
 
-	err := q.Pre.Encode(bw)
+	err := q.Company.Encode(bw)
+	if err != nil {
+		zap.L().Error("encode company failed", zap.Error(err), zap.Any("company", q.Company))
+		return err
+	}
+
+	err = q.Pre.Encode(bw)
 	if err != nil {
 		zap.L().Error("encode pre serial failed", zap.Error(err), zap.Int("count", len(*q.Pre)))
 		return err
@@ -199,8 +231,15 @@ func (q DailyQuote) Encode(w io.Writer) error {
 func (q *DailyQuote) Decode(r io.Reader) error {
 	br := bio.NewBinaryReader(r)
 
+	company := new(Company)
+	err := company.Decode(br)
+	if err != nil {
+		zap.L().Error("decode company failed", zap.Error(err))
+		return err
+	}
+
 	pre := new(Serial)
-	err := pre.Decode(br)
+	err = pre.Decode(br)
 	if err != nil {
 		zap.L().Error("decode pre serial failed", zap.Error(err))
 		return err
@@ -220,6 +259,7 @@ func (q *DailyQuote) Decode(r io.Reader) error {
 		return err
 	}
 
+	q.Company = company
 	q.Pre = pre
 	q.Regular = regular
 	q.Post = post
@@ -229,8 +269,12 @@ func (q *DailyQuote) Decode(r io.Reader) error {
 
 // Equal check company daily quote is equal
 func (q DailyQuote) Equal(s DailyQuote) error {
+	err := q.Company.Equal(*s.Company)
+	if err != nil {
+		return fmt.Errorf("company is not equal due to %v", err)
+	}
 
-	err := q.Pre.Equal(*s.Pre)
+	err = q.Pre.Equal(*s.Pre)
 	if err != nil {
 		return fmt.Errorf("pre serial is not equal due to %v", err)
 	}

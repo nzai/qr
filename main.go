@@ -5,8 +5,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/nzai/qr/sources"
-
 	"github.com/nzai/qr/exchanges"
 	"github.com/nzai/qr/schedulers"
 	"github.com/nzai/qr/stores"
@@ -43,7 +41,7 @@ func main() {
 			zap.String("arg", *exchangeArgument))
 	}
 
-	scheduler := schedulers.NewScheduler(sources.NewYahooFinance(), store, _exchanges...)
+	scheduler := schedulers.NewScheduler(store, _exchanges...)
 	wg := scheduler.Run(startDate)
 	wg.Wait()
 }

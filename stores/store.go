@@ -12,12 +12,14 @@ import (
 
 // Store define exchange daily quote store
 type Store interface {
-	// Exists check quote exists
+	// Exists exchange daily quote exists
 	Exists(exchanges.Exchange, time.Time) (bool, error)
-	// Save save quote to dest path
+	// Save save exchange daily quote
 	Save(exchanges.Exchange, time.Time, quotes.Encoder) error
-	// Load load quote from path
+	// Load load exchange daily quote
 	Load(exchanges.Exchange, time.Time, quotes.Decoder) error
+	// Remove remove exchange daily quote
+	Remove(exchanges.Exchange, time.Time) error
 }
 
 // Parse parse command argument
