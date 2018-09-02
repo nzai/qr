@@ -15,7 +15,7 @@ type ExchangeDailyQuote struct {
 	Exchange  string
 	Date      time.Time
 	Companies map[string]*Company
-	Quotes    map[string]*DailyQuote
+	Quotes    map[string]*CompanyDailyQuote
 }
 
 // Encode encode exchange daily quote to io.Writer
@@ -117,9 +117,9 @@ func (q *ExchangeDailyQuote) Decode(r io.Reader) error {
 		return err
 	}
 
-	dailyQuotes := make(map[string]*DailyQuote, count)
+	dailyQuotes := make(map[string]*CompanyDailyQuote, count)
 	for index := 0; index < count; index++ {
-		dailyQuote := new(DailyQuote)
+		dailyQuote := new(CompanyDailyQuote)
 		err = dailyQuote.Decode(br)
 		if err != nil {
 			zap.L().Error("decode daily quote failed", zap.Error(err))
@@ -188,21 +188,35 @@ func (q ExchangeDailyQuote) Equal(s ExchangeDailyQuote) error {
 	return nil
 }
 
-// DailyQuote define company daily quote
-type DailyQuote struct {
-	Company *Company
-	Pre     *Serial
-	Regular *Serial
-	Post    *Serial
+// CompanyDailyQuote define company daily quote
+type CompanyDailyQuote struct {
+	Company  *Company
+	Dividend *Dividend
+	Split    *Split
+	Pre      *Serial
+	Regular  *Serial
+	Post     *Serial
 }
 
 // Encode encode company daily quote to io.Writer
-func (q DailyQuote) Encode(w io.Writer) error {
+func (q CompanyDailyQuote) Encode(w io.Writer) error {
 	bw := bio.NewBinaryWriter(w)
 
 	err := q.Company.Encode(bw)
 	if err != nil {
 		zap.L().Error("encode company failed", zap.Error(err), zap.Any("company", q.Company))
+		return err
+	}
+
+	err = q.Dividend.Encode(bw)
+	if err != nil {
+		zap.L().Error("encode dividend failed", zap.Error(err), zap.Any("dividend", q.Dividend))
+		return err
+	}
+
+	err = q.Split.Encode(bw)
+	if err != nil {
+		zap.L().Error("encode split failed", zap.Error(err), zap.Any("split", q.Split))
 		return err
 	}
 
@@ -228,13 +242,27 @@ func (q DailyQuote) Encode(w io.Writer) error {
 }
 
 // Decode decode company daily quote from io.Reader
-func (q *DailyQuote) Decode(r io.Reader) error {
+func (q *CompanyDailyQuote) Decode(r io.Reader) error {
 	br := bio.NewBinaryReader(r)
 
 	company := new(Company)
 	err := company.Decode(br)
 	if err != nil {
 		zap.L().Error("decode company failed", zap.Error(err))
+		return err
+	}
+
+	dividend := new(Dividend)
+	err = dividend.Decode(br)
+	if err != nil {
+		zap.L().Error("decode dividend failed", zap.Error(err))
+		return err
+	}
+
+	split := new(Split)
+	err = split.Decode(br)
+	if err != nil {
+		zap.L().Error("decode split failed", zap.Error(err))
 		return err
 	}
 
@@ -260,6 +288,8 @@ func (q *DailyQuote) Decode(r io.Reader) error {
 	}
 
 	q.Company = company
+	q.Dividend = dividend
+	q.Split = split
 	q.Pre = pre
 	q.Regular = regular
 	q.Post = post
@@ -268,10 +298,20 @@ func (q *DailyQuote) Decode(r io.Reader) error {
 }
 
 // Equal check company daily quote is equal
-func (q DailyQuote) Equal(s DailyQuote) error {
+func (q CompanyDailyQuote) Equal(s CompanyDailyQuote) error {
 	err := q.Company.Equal(*s.Company)
 	if err != nil {
 		return fmt.Errorf("company is not equal due to %v", err)
+	}
+
+	err = q.Dividend.Equal(*s.Dividend)
+	if err != nil {
+		return fmt.Errorf("dividend is not equal due to %v", err)
+	}
+
+	err = q.Split.Equal(*s.Split)
+	if err != nil {
+		return fmt.Errorf("split is not equal due to %v", err)
 	}
 
 	err = q.Pre.Equal(*s.Pre)

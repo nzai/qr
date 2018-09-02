@@ -9,7 +9,7 @@ import (
 // Source define company daily quote source
 type Source interface {
 	// Crawl company daily quote
-	Crawl(*quotes.Company, time.Time, string) (*quotes.DailyQuote, error)
+	Crawl(*quotes.Company, time.Time, string) (*quotes.CompanyDailyQuote, error)
 }
 
 // SplitDividendSource define company daily split and dividend source

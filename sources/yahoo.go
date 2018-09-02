@@ -22,7 +22,7 @@ func NewYahooFinance() *YahooFinance {
 }
 
 // Crawl crawl company daily quote
-func (yahoo YahooFinance) Crawl(company *quotes.Company, date time.Time, suffix string) (*quotes.DailyQuote, error) {
+func (yahoo YahooFinance) Crawl(company *quotes.Company, date time.Time, suffix string) (*quotes.CompanyDailyQuote, error) {
 
 	tomorrow := date.AddDate(0, 0, 1)
 	pattern := "https://query2.finance.yahoo.com/v8/finance/chart/%s%s?period2=%d&period1=%d&interval=1m&indicators=quote&includeTimestamps=true&includePrePost=true&events=div%%7Csplit%%7Cearn&corsDomain=finance.yahoo.com"

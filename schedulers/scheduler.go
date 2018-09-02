@@ -204,8 +204,8 @@ func (s Scheduler) crawlOneDay(exchange exchanges.Exchange, companies []*quotes.
 }
 
 // crawlCompaniesDailyQuote crawl company quotes in special day
-func (s Scheduler) crawlCompaniesDailyQuote(exchange exchanges.Exchange, companies []*quotes.Company, date time.Time) (map[string]*quotes.DailyQuote, error) {
-
+func (s Scheduler) crawlCompaniesDailyQuote(exchange exchanges.Exchange, companies []*quotes.Company, date time.Time) (map[string]*quotes.CompanyDailyQuote, error) {
+	// limiter
 	ch := make(chan bool, constants.DefaultParallel)
 	defer close(ch)
 
@@ -213,14 +213,14 @@ func (s Scheduler) crawlCompaniesDailyQuote(exchange exchanges.Exchange, compani
 	wg.Add(len(companies))
 
 	mutex := new(sync.Mutex)
-	dailyQuotes := make(map[string]*quotes.DailyQuote, len(companies))
+	cdqs := make(map[string]*quotes.CompanyDailyQuote, len(companies))
 	for _, company := range companies {
 		go func(_company *quotes.Company) {
-			dq, err := exchange.Crawl(_company, date)
+			cdq, err := exchange.Crawl(_company, date)
 			// ignore error
 			if err == nil {
 				mutex.Lock()
-				dailyQuotes[_company.Code] = dq
+				cdqs[_company.Code] = cdq
 				mutex.Unlock()
 			}
 
@@ -233,5 +233,5 @@ func (s Scheduler) crawlCompaniesDailyQuote(exchange exchanges.Exchange, compani
 	}
 	wg.Wait()
 
-	return dailyQuotes, nil
+	return cdqs, nil
 }

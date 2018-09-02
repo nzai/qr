@@ -98,6 +98,6 @@ func (s Hkex) queryCompanies(page, api string) ([]*quotes.Company, error) {
 }
 
 // Crawl company daily quote
-func (s Hkex) Crawl(company *quotes.Company, date time.Time) (*quotes.DailyQuote, error) {
+func (s Hkex) Crawl(company *quotes.Company, date time.Time) (*quotes.CompanyDailyQuote, error) {
 	return s.source.Crawl(company, date, ".HK")
 }

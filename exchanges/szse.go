@@ -17,11 +17,15 @@ import (
 // Szse define shenzhen stock exchange
 type Szse struct {
 	source sources.Source
+	sd     sources.SplitDividendSource
 }
 
 // NewSzse create shenzhen stock exchange
 func NewSzse() *Szse {
-	return &Szse{source: sources.NewYahooFinance()}
+	return &Szse{
+		source: sources.NewYahooFinance(),
+		sd:     sources.NewIFengFinance(),
+	}
 }
 
 // Code get exchange code
@@ -85,6 +89,29 @@ func (s Szse) parse(html string) ([]*quotes.Company, error) {
 }
 
 // Crawl company daily quote
-func (s Szse) Crawl(company *quotes.Company, date time.Time) (*quotes.DailyQuote, error) {
-	return s.source.Crawl(company, date, ".SZ")
+func (s Szse) Crawl(company *quotes.Company, date time.Time) (*quotes.CompanyDailyQuote, error) {
+	// 分时数据从雅虎抓取
+	cdq, err := s.source.Crawl(company, date, ".SZ")
+	if err != nil {
+		zap.L().Error("crawl company daily quote failed",
+			zap.Error(err),
+			zap.Any("company", company),
+			zap.Time("date", date))
+		return nil, err
+	}
+
+	// 因为雅虎财经api中关于上海和深证交易所的股票拆分/送股信息是错误的，所以分红配股单独查询
+	dividend, split, err := s.sd.QuerySplitAndDividend(company, date)
+	if err != nil {
+		zap.L().Error("query split and dividend failed",
+			zap.Error(err),
+			zap.Any("company", company),
+			zap.Time("date", date))
+		return nil, err
+	}
+
+	cdq.Dividend = dividend
+	cdq.Split = split
+
+	return cdq, nil
 }

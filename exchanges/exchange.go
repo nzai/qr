@@ -13,7 +13,7 @@ type Exchange interface {
 	Code() string
 	Location() *time.Location
 	Companies() ([]*quotes.Company, error)
-	Crawl(*quotes.Company, time.Time) (*quotes.DailyQuote, error)
+	Crawl(*quotes.Company, time.Time) (*quotes.CompanyDailyQuote, error)
 }
 
 var dict = map[string]Exchange{

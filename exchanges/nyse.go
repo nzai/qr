@@ -96,6 +96,6 @@ func (s Nyse) parseCSV(content string) ([]*quotes.Company, error) {
 }
 
 // Crawl company daily quote
-func (s Nyse) Crawl(company *quotes.Company, date time.Time) (*quotes.DailyQuote, error) {
+func (s Nyse) Crawl(company *quotes.Company, date time.Time) (*quotes.CompanyDailyQuote, error) {
 	return s.source.Crawl(company, date, "")
 }

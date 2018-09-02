@@ -107,12 +107,35 @@ func (q YahooQuote) Validate() error {
 }
 
 // ToCompanyDailyQuote convert yahoo finance response to company daily quote
-func (q YahooQuote) ToCompanyDailyQuote(company *Company, start, end uint64) *DailyQuote {
-	dq := &DailyQuote{
-		Company: company,
-		Pre:     new(Serial),
-		Regular: new(Serial),
-		Post:    new(Serial),
+func (q YahooQuote) ToCompanyDailyQuote(company *Company, start, end uint64) *CompanyDailyQuote {
+	cdq := &CompanyDailyQuote{
+		Company:  company,
+		Dividend: new(Dividend),
+		Split:    new(Split),
+		Pre:      new(Serial),
+		Regular:  new(Serial),
+		Post:     new(Serial),
+	}
+
+	for _, dividend := range q.Chart.Result[0].Events.Dividends {
+		if dividend.Date < start || dividend.Date >= end {
+			continue
+		}
+		cdq.Dividend.Enable = true
+		cdq.Dividend.Timestamp = dividend.Date
+		cdq.Dividend.Amount = dividend.Amount
+		break
+	}
+
+	for _, split := range q.Chart.Result[0].Events.Splits {
+		if split.Date < start || split.Date >= end {
+			continue
+		}
+		cdq.Split.Enable = true
+		cdq.Split.Timestamp = split.Date
+		cdq.Split.Numerator = float32(split.Numerator)
+		cdq.Split.Denominator = float32(split.Denominator)
+		break
 	}
 
 	tp := q.Chart.Result[0].Meta.TradingPeriods
@@ -134,17 +157,17 @@ func (q YahooQuote) ToCompanyDailyQuote(company *Company, start, end uint64) *Da
 
 		//	Pre, Regular, Post
 		if ts >= tp.Pres[0][0].Start && ts < tp.Pres[0][0].End {
-			*dq.Pre = append(*dq.Pre, quote)
+			*cdq.Pre = append(*cdq.Pre, quote)
 		} else if ts >= tp.Regulars[0][0].Start && ts < tp.Regulars[0][0].End {
-			*dq.Regular = append(*dq.Regular, quote)
+			*cdq.Regular = append(*cdq.Regular, quote)
 		} else if ts >= tp.Posts[0][0].Start && ts < tp.Posts[0][0].End {
-			*dq.Post = append(*dq.Post, quote)
+			*cdq.Post = append(*cdq.Post, quote)
 		} else {
 			continue
 		}
 	}
 
-	return dq
+	return cdq
 }
 
 // YahooPeroid define trading peroid
