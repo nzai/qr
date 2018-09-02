@@ -15,9 +15,9 @@ type Store interface {
 	// Exists exchange daily quote exists
 	Exists(exchanges.Exchange, time.Time) (bool, error)
 	// Save save exchange daily quote
-	Save(exchanges.Exchange, time.Time, quotes.Encoder) error
+	Save(exchanges.Exchange, time.Time, *quotes.ExchangeDailyQuote) error
 	// Load load exchange daily quote
-	Load(exchanges.Exchange, time.Time, quotes.Decoder) error
+	Load(exchanges.Exchange, time.Time) (*quotes.ExchangeDailyQuote, error)
 	// Remove remove exchange daily quote
 	Remove(exchanges.Exchange, time.Time) error
 }

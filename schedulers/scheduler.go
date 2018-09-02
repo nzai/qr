@@ -193,36 +193,6 @@ func (s Scheduler) crawlOneDay(exchange exchanges.Exchange, companies []*quotes.
 		return err
 	}
 
-	// valid
-	saved := new(quotes.ExchangeDailyQuote)
-	err = s.store.Load(exchange, date, saved)
-	if err != nil {
-		zap.L().Error("load exchange daily quote failed",
-			zap.Error(err),
-			zap.String("exchange", exchange.Code()),
-			zap.Time("date", date))
-		return err
-	}
-
-	// compare current with saved
-	err = edq.Equal(*saved)
-	if err != nil {
-		zap.L().Error("current quote is different from saved",
-			zap.Error(err),
-			zap.String("exchange", exchange.Code()),
-			zap.Time("date", date))
-
-		err1 := s.store.Remove(exchange, date)
-		if err1 != nil {
-			zap.L().Error("remove invalid quote failed",
-				zap.Error(err1),
-				zap.String("exchange", exchange.Code()),
-				zap.Time("date", date))
-		}
-
-		return err
-	}
-
 	zap.L().Info("save exchange daily quote success",
 		zap.Error(err),
 		zap.String("exchange", exchange.Code()),
