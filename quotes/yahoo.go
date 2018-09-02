@@ -110,8 +110,8 @@ func (q YahooQuote) Validate() error {
 func (q YahooQuote) ToCompanyDailyQuote(company *Company, start, end uint64) *CompanyDailyQuote {
 	cdq := &CompanyDailyQuote{
 		Company:  company,
-		Dividend: new(Dividend),
-		Split:    new(Split),
+		Dividend: &Dividend{Enable: false, Timestamp: 0, Amount: 0},
+		Split:    &Split{Enable: false, Timestamp: 0, Numerator: 0, Denominator: 0},
 		Pre:      new(Serial),
 		Regular:  new(Serial),
 		Post:     new(Serial),
@@ -121,6 +121,7 @@ func (q YahooQuote) ToCompanyDailyQuote(company *Company, start, end uint64) *Co
 		if dividend.Date < start || dividend.Date >= end {
 			continue
 		}
+
 		cdq.Dividend.Enable = true
 		cdq.Dividend.Timestamp = dividend.Date
 		cdq.Dividend.Amount = dividend.Amount
@@ -131,6 +132,7 @@ func (q YahooQuote) ToCompanyDailyQuote(company *Company, start, end uint64) *Co
 		if split.Date < start || split.Date >= end {
 			continue
 		}
+
 		cdq.Split.Enable = true
 		cdq.Split.Timestamp = split.Date
 		cdq.Split.Numerator = float32(split.Numerator)

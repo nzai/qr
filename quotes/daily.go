@@ -117,23 +117,23 @@ func (q *ExchangeDailyQuote) Decode(r io.Reader) error {
 		return err
 	}
 
-	dailyQuotes := make(map[string]*CompanyDailyQuote, count)
+	cdqs := make(map[string]*CompanyDailyQuote, count)
 	for index := 0; index < count; index++ {
-		dailyQuote := new(CompanyDailyQuote)
-		err = dailyQuote.Decode(br)
+		cdq := new(CompanyDailyQuote)
+		err = cdq.Decode(br)
 		if err != nil {
 			zap.L().Error("decode daily quote failed", zap.Error(err))
 			return err
 		}
 
-		dailyQuotes[dailyQuote.Company.Code] = dailyQuote
+		cdqs[cdq.Company.Code] = cdq
 	}
 
 	q.Version = version
 	q.Exchange = exchange
 	q.Date = date
 	q.Companies = companies
-	q.Quotes = dailyQuotes
+	q.Quotes = cdqs
 
 	return nil
 }

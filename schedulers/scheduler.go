@@ -64,7 +64,7 @@ func (s Scheduler) historyJob(wg *sync.WaitGroup, exchange exchanges.Exchange, s
 		zap.Time("end", end))
 
 	var dates []time.Time
-	for date := start; !date.Before(end); date = date.AddDate(0, 0, 1) {
+	for date := start; !date.After(end); date = date.AddDate(0, 0, 1) {
 		exists, err := s.store.Exists(exchange, date)
 		if err != nil {
 			zap.L().Error("check exchange daily quote exists failed",
@@ -86,7 +86,7 @@ func (s Scheduler) historyJob(wg *sync.WaitGroup, exchange exchanges.Exchange, s
 			zap.Times("dates", dates))
 	}
 
-	zap.L().Info("exchange history job success",
+	zap.L().Info("exchange history job finished",
 		zap.String("exchange", exchange.Code()),
 		zap.Time("start", start),
 		zap.Time("end", end))
@@ -131,6 +131,10 @@ func (s Scheduler) dailyJob(wg *sync.WaitGroup, exchange exchanges.Exchange) {
 
 // crawl crawl exchange quotes in special days
 func (s Scheduler) crawl(exchange exchanges.Exchange, dates ...time.Time) error {
+	if len(dates) == 0 {
+		return nil
+	}
+
 	// get companies
 	companies, err := exchange.Companies()
 	if err != nil {
@@ -161,7 +165,7 @@ func (s Scheduler) crawl(exchange exchanges.Exchange, dates ...time.Time) error 
 // crawlOneDay crawl exchange quotes in special day
 func (s Scheduler) crawlOneDay(exchange exchanges.Exchange, companies []*quotes.Company, date time.Time) error {
 	// crawl
-	dailyQuotes, err := s.crawlCompaniesDailyQuote(exchange, companies, date)
+	cdqs, err := s.crawlCompaniesDailyQuote(exchange, companies, date)
 	if err != nil {
 		zap.L().Error("get exchange company quotes failed",
 			zap.Error(err),
@@ -180,7 +184,7 @@ func (s Scheduler) crawlOneDay(exchange exchanges.Exchange, companies []*quotes.
 		Exchange:  exchange.Code(),
 		Date:      date,
 		Companies: companyDict,
-		Quotes:    dailyQuotes,
+		Quotes:    cdqs,
 	}
 
 	// save
@@ -198,7 +202,7 @@ func (s Scheduler) crawlOneDay(exchange exchanges.Exchange, companies []*quotes.
 		zap.String("exchange", exchange.Code()),
 		zap.Time("date", date),
 		zap.Int("total companies", len(companies)),
-		zap.Int("valid companies", len(dailyQuotes)))
+		zap.Int("valid companies", len(cdqs)))
 
 	return nil
 }

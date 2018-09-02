@@ -82,13 +82,15 @@ func (s FileSystem) Save(exchange exchanges.Exchange, date time.Time, edq *quote
 			zap.String("exchange", exchange.Code()),
 			zap.Time("date", date))
 
-		err = os.Remove(tempPath)
-		if err != nil {
+		err1 := os.Remove(tempPath)
+		if err1 != nil {
 			zap.L().Error("remove invalid quote failed",
-				zap.Error(err),
+				zap.Error(err1),
 				zap.String("exchange", exchange.Code()),
 				zap.Time("date", date))
 		}
+
+		return err
 	}
 
 	err = os.Rename(tempPath, filePath)

@@ -11,9 +11,9 @@ import (
 // Split define stock split
 type Split struct {
 	Enable      bool
-	Timestamp   uint64  `json:"date"`
-	Numerator   float32 `json:"numerator"`
-	Denominator float32 `json:"denominator"`
+	Timestamp   uint64
+	Numerator   float32
+	Denominator float32
 }
 
 // Encode encode split to io.Writer

@@ -104,10 +104,6 @@ func (s Sse) Crawl(company *quotes.Company, date time.Time) (*quotes.CompanyDail
 	// 分时数据从雅虎抓取
 	cdq, err := s.source.Crawl(company, date, ".SS")
 	if err != nil {
-		zap.L().Error("crawl company daily quote failed",
-			zap.Error(err),
-			zap.Any("company", company),
-			zap.Time("date", date))
 		return nil, err
 	}
 

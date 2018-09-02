@@ -37,9 +37,12 @@ func (s IFengFinance) QuerySplitAndDividend(company *quotes.Company, date time.T
 	}
 	defer response.Body.Close()
 
+	dividend := &quotes.Dividend{Enable: false, Timestamp: 0, Amount: 0}
+	split := &quotes.Split{Enable: false, Timestamp: 0, Numerator: 0, Denominator: 0}
+
 	// ignore on server forbidden
 	if response.StatusCode == http.StatusForbidden {
-		return nil, nil, nil
+		return dividend, split, nil
 	}
 
 	buffer, err := ioutil.ReadAll(response.Body)
@@ -69,10 +72,10 @@ func (s IFengFinance) QuerySplitAndDividend(company *quotes.Company, date time.T
 			return nil, nil, fmt.Errorf("ifeng finance dividend invalid due to dividend: %s", matches[3])
 		}
 
-		dividend := &quotes.Dividend{
-			Enable:    amount > 0,
-			Timestamp: uint64(date.Unix()),
-			Amount:    float32(amount / 10), // A股都是按每十股计算
+		if amount > 0 {
+			dividend.Enable = true
+			dividend.Timestamp = uint64(date.Unix())
+			dividend.Amount = float32(amount / 10) // A股都是按每十股计算
 		}
 
 		// 送股
@@ -89,15 +92,15 @@ func (s IFengFinance) QuerySplitAndDividend(company *quotes.Company, date time.T
 			return nil, nil, fmt.Errorf("ifeng finance split numerator invalid due to numerator: %s", matches[2])
 		}
 
-		split := &quotes.Split{
-			Enable:      numerator1+numerator2 > 0,
-			Timestamp:   uint64(date.Unix()),
-			Numerator:   float32(numerator1 + numerator2),
-			Denominator: 10, // A股都是按每十股计算
+		if numerator1+numerator2 > 0 {
+			split.Enable = true
+			split.Timestamp = uint64(date.Unix())
+			split.Numerator = float32(numerator1 + numerator2)
+			split.Denominator = 10 // A股都是按每十股计算
 		}
 
-		return dividend, split, nil
+		break
 	}
 
-	return new(quotes.Dividend), new(quotes.Split), nil
+	return dividend, split, nil
 }
