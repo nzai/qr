@@ -178,24 +178,8 @@ func (s FileSystem) load(filePath string) (*quotes.ExchangeDailyQuote, error) {
 	return edq, nil
 }
 
-// Remove remove exchange daily quote
-func (s FileSystem) Remove(exchange exchanges.Exchange, date time.Time) error {
-	exists, _ := s.Exists(exchange, date)
-	if !exists {
-		return nil
-	}
-
-	filePath := s.storePath(exchange, date)
-	err := os.Remove(filePath)
-	if err != nil {
-		zap.L().Error("remove quote file failed",
-			zap.Error(err),
-			zap.String("exchange", exchange.Code()),
-			zap.Time("date", date),
-			zap.String("path", filePath))
-		return err
-	}
-
+// Close close store
+func (s FileSystem) Close() error {
 	return nil
 }
 

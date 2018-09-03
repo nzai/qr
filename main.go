@@ -2,14 +2,12 @@ package main
 
 import (
 	"flag"
-	"os"
 	"time"
 
 	"github.com/nzai/qr/exchanges"
 	"github.com/nzai/qr/schedulers"
 	"github.com/nzai/qr/stores"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 var (
@@ -19,7 +17,7 @@ var (
 )
 
 func main() {
-	logger := newLogger()
+	logger, _ := zap.NewDevelopment()
 	defer logger.Sync()
 
 	undo := zap.ReplaceGlobals(logger)
@@ -33,6 +31,7 @@ func main() {
 			zap.Error(err),
 			zap.String("arg", *storeArgument))
 	}
+	defer store.Close()
 
 	_exchanges, err := exchanges.Parse(*exchangeArgument)
 	if err != nil {
@@ -44,27 +43,4 @@ func main() {
 	scheduler := schedulers.NewScheduler(store, _exchanges...)
 	wg := scheduler.Run(startDate)
 	wg.Wait()
-}
-
-// newLogger create new zap logger
-func newLogger() *zap.Logger {
-
-	infoPriority := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-		return lvl >= zapcore.DebugLevel && lvl < zapcore.ErrorLevel
-	})
-	errorPriority := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-		return lvl >= zapcore.ErrorLevel
-	})
-
-	consoleWriter := zapcore.Lock(os.Stdout)
-	errorWriter := zapcore.Lock(os.Stderr)
-
-	consoleEncoder := zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig())
-
-	core := zapcore.NewTee(
-		zapcore.NewCore(consoleEncoder, consoleWriter, infoPriority),
-		zapcore.NewCore(consoleEncoder, errorWriter, errorPriority),
-	)
-
-	return zap.New(core, zap.AddCaller())
 }

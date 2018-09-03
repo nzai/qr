@@ -18,8 +18,8 @@ type Store interface {
 	Save(exchanges.Exchange, time.Time, *quotes.ExchangeDailyQuote) error
 	// Load load exchange daily quote
 	Load(exchanges.Exchange, time.Time) (*quotes.ExchangeDailyQuote, error)
-	// Remove remove exchange daily quote
-	Remove(exchanges.Exchange, time.Time) error
+	// Close close exchange daily quote store
+	Close() error
 }
 
 // Parse parse command argument
@@ -33,6 +33,8 @@ func Parse(arg string) (Store, error) {
 	switch parts[0] {
 	case "fs":
 		return NewFileSystem(parts[1]), nil
+	case "leveldb":
+		return NewLevelDB(parts[1]), nil
 	default:
 		zap.L().Error("store type invalid", zap.String("type", parts[0]))
 		return nil, fmt.Errorf("store type invalid: %s", parts[0])

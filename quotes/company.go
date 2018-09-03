@@ -125,3 +125,52 @@ func (l *CompanyList) Decode(r io.Reader) error {
 
 	return nil
 }
+
+// CompanyMap define company map
+type CompanyMap map[string]*Company
+
+// Encode encode company map to io.Writer
+func (m CompanyMap) Encode(w io.Writer) error {
+	bw := bio.NewBinaryWriter(w)
+
+	_, err := bw.Int(len(m))
+	if err != nil {
+		zap.L().Error("encode companies count failed", zap.Error(err), zap.Int("length", len(m)))
+		return err
+	}
+
+	for _, company := range m {
+		err = company.Encode(bw)
+		if err != nil {
+			zap.L().Error("encode company failed", zap.Error(err), zap.Any("company", company))
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Decode decode company map from io.Reader
+func (m *CompanyMap) Decode(r io.Reader) error {
+	br := bio.NewBinaryReader(r)
+
+	count, err := br.Int()
+	if err != nil {
+		zap.L().Error("decode companies count failed", zap.Error(err))
+		return err
+	}
+
+	*m = make(map[string]*Company, count)
+	for index := 0; index < count; index++ {
+		company := new(Company)
+		err = company.Decode(br)
+		if err != nil {
+			zap.L().Error("decode company failed", zap.Error(err))
+			return err
+		}
+
+		(*m)[company.Code] = company
+	}
+
+	return nil
+}
