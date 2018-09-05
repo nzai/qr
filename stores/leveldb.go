@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/nzai/bio"
 	"github.com/nzai/qr/exchanges"
 	"github.com/nzai/qr/quotes"
 	"github.com/syndtr/goleveldb/leveldb"
@@ -131,15 +132,31 @@ func (s LevelDB) createSaveBatch(exchange exchanges.Exchange, date time.Time, ed
 	batch := new(leveldb.Batch)
 
 	// save companies
-	err := s.saveAndEncode(batch, s.exchangeKey(exchange, date), edq.Companies)
+	buffer := new(bytes.Buffer)
+	bw := bio.NewBinaryWriter(buffer)
+
+	_, err := bw.Int(len(edq.Companies))
 	if err != nil {
-		zap.L().Error("batch save exchange daily companies failed",
+		zap.L().Error("encode companies count failed",
 			zap.Error(err),
 			zap.String("exchange", exchange.Code()),
 			zap.Time("date", date),
-			zap.Int("companies", len(*edq.Companies)))
+			zap.Any("companies", len(edq.Companies)))
 		return nil, err
 	}
+
+	for _, company := range edq.Companies {
+		err = company.Encode(bw)
+		if err != nil {
+			zap.L().Error("encode company failed",
+				zap.Error(err),
+				zap.String("exchange", exchange.Code()),
+				zap.Time("date", date),
+				zap.Any("companies", len(edq.Companies)))
+			return nil, err
+		}
+	}
+	batch.Put(s.exchangeKey(exchange, date), buffer.Bytes())
 
 	// save quotes
 	for _, cdq := range edq.Quotes {
@@ -263,15 +280,35 @@ func (s LevelDB) Load(exchange exchanges.Exchange, date time.Time) (*quotes.Exch
 }
 
 func (s LevelDB) load(reader leveldb.Reader, exchange exchanges.Exchange, date time.Time) (*quotes.ExchangeDailyQuote, error) {
-	// load companies
-	companies := new(quotes.CompanyMap)
-	err := s.loadAndDecode(reader, s.exchangeKey(exchange, date), companies, false)
+	b, err := s.db.Get(s.exchangeKey(exchange, date), nil)
 	if err != nil {
 		zap.L().Error("load exchange companies failed",
 			zap.Error(err),
 			zap.String("exchange", exchange.Code()),
 			zap.Time("date", date))
 		return nil, err
+	}
+
+	buffer := bytes.NewBuffer(b)
+	br := bio.NewBinaryReader(buffer)
+
+	// load companies
+	count, err := br.Int()
+	if err != nil {
+		zap.L().Error("decode companies count failed", zap.Error(err))
+		return nil, err
+	}
+
+	companies := make(map[string]*quotes.Company, count)
+	for index := 0; index < count; index++ {
+		company := new(quotes.Company)
+		err = company.Decode(br)
+		if err != nil {
+			zap.L().Error("decode company failed", zap.Error(err))
+			return nil, err
+		}
+
+		companies[company.Code] = company
 	}
 
 	// load quotes
@@ -294,9 +331,9 @@ func (s LevelDB) load(reader leveldb.Reader, exchange exchanges.Exchange, date t
 	return edq, nil
 }
 
-func (s LevelDB) loadCompanyQuotes(reader leveldb.Reader, exchange exchanges.Exchange, date time.Time, companies *quotes.CompanyMap) (map[string]*quotes.CompanyDailyQuote, error) {
-	cdqs := make(map[string]*quotes.CompanyDailyQuote, len(*companies))
-	for companyCode, company := range *companies {
+func (s LevelDB) loadCompanyQuotes(reader leveldb.Reader, exchange exchanges.Exchange, date time.Time, companies map[string]*quotes.Company) (map[string]*quotes.CompanyDailyQuote, error) {
+	cdqs := make(map[string]*quotes.CompanyDailyQuote, len(companies))
+	for companyCode, company := range companies {
 		_, err := reader.Get(s.companyKey(exchange, company, date), nil)
 		if err == leveldb.ErrNotFound {
 			continue

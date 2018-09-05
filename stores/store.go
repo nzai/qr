@@ -35,6 +35,8 @@ func Parse(arg string) (Store, error) {
 		return NewFileSystem(parts[1]), nil
 	case "leveldb":
 		return NewLevelDB(parts[1]), nil
+	case "ledis":
+		return NewLedis(parts[1]), nil
 	default:
 		zap.L().Error("store type invalid", zap.String("type", parts[0]))
 		return nil, fmt.Errorf("store type invalid: %s", parts[0])

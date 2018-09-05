@@ -174,16 +174,15 @@ func (s Scheduler) crawlOneDay(exchange exchanges.Exchange, companies []*quotes.
 		return err
 	}
 
-	companyDict := make(map[string]*quotes.Company, len(companies))
+	companyMap := make(map[string]*quotes.Company, len(companies))
 	for _, company := range companies {
-		companyDict[company.Code] = company
+		companyMap[company.Code] = company
 	}
-	companyMap := quotes.CompanyMap(companyDict)
 
 	edq := &quotes.ExchangeDailyQuote{
 		Exchange:  exchange.Code(),
 		Date:      date,
-		Companies: &companyMap,
+		Companies: companyMap,
 		Quotes:    cdqs,
 	}
 

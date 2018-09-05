@@ -13,7 +13,7 @@ import (
 type ExchangeDailyQuote struct {
 	Exchange  string
 	Date      time.Time
-	Companies *CompanyMap
+	Companies map[string]*Company
 	Quotes    map[string]*CompanyDailyQuote
 }
 
@@ -33,13 +33,13 @@ func (q ExchangeDailyQuote) Encode(w io.Writer) error {
 		return err
 	}
 
-	_, err = bw.Int(len(*q.Companies))
+	_, err = bw.Int(len(q.Companies))
 	if err != nil {
-		zap.L().Error("encode company count failed", zap.Error(err), zap.Int("count", len(*q.Companies)))
+		zap.L().Error("encode company count failed", zap.Error(err), zap.Int("count", len(q.Companies)))
 		return err
 	}
 
-	for _, company := range *q.Companies {
+	for _, company := range q.Companies {
 		err = company.Encode(bw)
 		if err != nil {
 			zap.L().Error("encode companye failed", zap.Error(err), zap.Any("company", company))
@@ -97,7 +97,6 @@ func (q *ExchangeDailyQuote) Decode(r io.Reader) error {
 
 		companies[company.Code] = company
 	}
-	companyMap := CompanyMap(companies)
 
 	count, err = br.Int()
 	if err != nil {
@@ -119,7 +118,7 @@ func (q *ExchangeDailyQuote) Decode(r io.Reader) error {
 
 	q.Exchange = exchange
 	q.Date = date
-	q.Companies = &companyMap
+	q.Companies = companies
 	q.Quotes = cdqs
 
 	return nil
@@ -136,12 +135,12 @@ func (q ExchangeDailyQuote) Equal(s ExchangeDailyQuote) error {
 		return fmt.Errorf("date %s is not equal from %s", q.Date.Format("2006-01-02"), s.Date.Format("2006-01-02"))
 	}
 
-	if len(*q.Companies) != len(*s.Companies) {
-		return fmt.Errorf("companis count %d is not equal from %d", len(*q.Companies), len(*s.Companies))
+	if len(q.Companies) != len(s.Companies) {
+		return fmt.Errorf("companis count %d is not equal from %d", len(q.Companies), len(s.Companies))
 	}
 
-	for companyCode, company := range *q.Companies {
-		another, found := (*s.Companies)[companyCode]
+	for companyCode, company := range q.Companies {
+		another, found := s.Companies[companyCode]
 		if !found {
 			return fmt.Errorf("company %s/%s is not found from another", companyCode, company.Name)
 		}
