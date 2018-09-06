@@ -134,15 +134,18 @@ func (s Ledis) Save(exchange exchanges.Exchange, date time.Time, edq *quotes.Exc
 			zap.Time("date", date))
 
 		// delete exchange daily key if validate failed
-		_, err1 := s.db.Del(s.exchangeKey(exchange, date))
+		err1 := s.remove(exchange, date, edq)
 		if err1 != nil {
-			zap.L().Error("delete saved exchange daily quote failed",
+			zap.L().Error("remove saved exchange daily quote failed",
 				zap.Error(err),
 				zap.String("exchange", exchange.Code()),
 				zap.Time("date", date))
 		} else {
-			zap.L().Info("delete saved exchange daily quote success", zap.ByteString("key", s.exchangeKey(exchange, date)))
+			zap.L().Info("remove saved exchange daily quote success",
+				zap.String("exchange", exchange.Code()),
+				zap.Time("date", date))
 		}
+
 		return err
 	}
 
@@ -516,4 +519,102 @@ func (s Ledis) loadCompanyQuoteSerial(exchange exchanges.Exchange, company *quot
 	qs := quotes.Serial(serial)
 
 	return &qs, nil
+}
+
+func (s Ledis) remove(exchange exchanges.Exchange, date time.Time, edq *quotes.ExchangeDailyQuote) error {
+	// remove company daily quotes
+	var err error
+	for _, cdq := range edq.Quotes {
+		err = s.removeCompanyDailyQuote(exchange, date, cdq)
+		if err != nil {
+			zap.L().Error("remove company daily quote failed",
+				zap.Error(err),
+				zap.String("exchange", exchange.Code()),
+				zap.Any("company", cdq.Company),
+				zap.Time("date", date))
+			return err
+		}
+	}
+
+	// remove exchange daily quote
+	_, err = s.db.Del(s.exchangeKey(exchange, date))
+	if err != nil {
+		zap.L().Error("remove exchange daily companies failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Time("date", date))
+		return err
+	}
+
+	return nil
+}
+
+func (s Ledis) removeCompanyDailyQuote(exchange exchanges.Exchange, date time.Time, cdq *quotes.CompanyDailyQuote) error {
+	// remove rollup
+	_, err := s.db.Del(s.companyKey(exchange, cdq.Company, date))
+	if err != nil {
+		zap.L().Error("remove company rollup quote failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Any("company", cdq.Company),
+			zap.Time("date", date))
+		return err
+	}
+
+	// remove dividend
+	_, err = s.db.HDel(s.dividendKey(exchange, cdq.Company), []byte(date.Format(datePattern)))
+	if err != nil {
+		zap.L().Error("remove company dividend failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Any("company", cdq.Company),
+			zap.Time("date", date))
+		return err
+	}
+
+	// remove split
+	_, err = s.db.HDel(s.splitKey(exchange, cdq.Company), []byte(date.Format(datePattern)))
+	if err != nil {
+		zap.L().Error("remove company split failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Any("company", cdq.Company),
+			zap.Time("date", date))
+		return err
+	}
+
+	// remove pre
+	_, err = s.db.Del(s.companySerialKey(exchange, cdq.Company, date, quotes.SerialTypePre))
+	if err != nil {
+		zap.L().Error("remove company pre serial failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Any("company", cdq.Company),
+			zap.Time("date", date))
+		return err
+	}
+
+	// remove regular
+	_, err = s.db.Del(s.companySerialKey(exchange, cdq.Company, date, quotes.SerialTypeRegular))
+	if err != nil {
+		zap.L().Error("remove company regular serial failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Any("company", cdq.Company),
+			zap.Time("date", date))
+		return err
+	}
+
+	// remove post
+	_, err = s.db.Del(s.companySerialKey(exchange, cdq.Company, date, quotes.SerialTypePost))
+	if err != nil {
+		zap.L().Error("remove company post serial failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Any("company", cdq.Company),
+			zap.Time("date", date))
+		return err
+	}
+
+	return nil
 }
