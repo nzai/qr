@@ -6,11 +6,19 @@ import (
 	"time"
 
 	"github.com/nzai/bio"
+	"github.com/nzai/qr/constants"
 	"github.com/nzai/qr/exchanges"
 	"github.com/nzai/qr/quotes"
 	"github.com/syndtr/goleveldb/leveldb"
 	"go.uber.org/zap"
 )
+
+// exchange daily				key: {exchange}:{date}												value: 1 / 0 (is trading day)
+// exchange daily companies		key: {exchange}:{date}:{companyCode}								value:{companyName}
+// company daily rollup quote	key: {exchange}:{companyCode}:{date} 								value:{open},{close},{high},{low},{volume}
+// company daily quote serial	key: {exchange}:{companyCode}:{date}:{Pre|Regular|Post}:{timestamp}	value:{open},{close},{high},{low},{volume}
+// company daily dividend		key: {exchange}:{companyCode}:dividend:{date}						value:{timestamp},{amount}
+// company daily split			key: {exchange}:{companyCode}:split:{date}							value:{timestamp},{numerator},{denominator}
 
 // LevelDB level db store
 type LevelDB struct {
@@ -35,35 +43,47 @@ func (s LevelDB) Close() error {
 	return s.db.Close()
 }
 
-// nasdaq:20180601					company array
-// nasdaq:aapl:20180601				company rollup quote
-// nasdaq:aapl:20180601:regular		quotes
-// nasdaq:aapl:dividend:20180601	dividend
-// nasdaq:aapl:split:20180601		split
-
-func (s LevelDB) exchangeKey(exchange exchanges.Exchange, date time.Time) []byte {
-	return []byte(fmt.Sprintf("%s:%s", exchange.Code(), date.Format("20060102")))
+// exchangeDailyKV create exchange daily kv, key is {exchange}:{date}, value is 1(is trading day) or 0
+func (s LevelDB) exchangeDailyKV(exchange exchanges.Exchange, date time.Time, isTradingDay bool) ([]byte, []byte) {
+	key := []byte(fmt.Sprintf("%s:%s", exchange.Code(), date.Format(constants.DatePattern)))
+	value := []byte{byte(0)}
+	if isTradingDay {
+		value[0] = byte(1)
+	}
+	return key, value
 }
 
-func (s LevelDB) companyKey(exchange exchanges.Exchange, company *quotes.Company, date time.Time) []byte {
-	return []byte(fmt.Sprintf("%s:%s:%s", exchange.Code(), company.Code, date.Format("20060102")))
+// exchangeDailyCompanyKey create exchange daily company kv, key is {exchange}:{date}:{companyCode}, value is {companyName}
+func (s LevelDB) exchangeDailyCompanyKey(exchange exchanges.Exchange, date time.Time, company *quotes.Company) ([]byte, []byte) {
+	key := []byte(fmt.Sprintf("%s:%s:%s", exchange.Code(), date.Format(constants.DatePattern), company.Code))
+	value := []byte(company.Name)
+	return key, value
 }
 
-func (s LevelDB) companySerialKey(exchange exchanges.Exchange, company *quotes.Company, date time.Time, serialType quotes.SerialType) []byte {
-	return []byte(fmt.Sprintf("%s:%s:%s:%s", exchange.Code(), company.Code, date.Format("20060102"), serialType.String()))
+// companyDailyRollupKV create company daily rollup quote, key is {exchange}:{companyCode}:{date}, value is {open},{close},{high},{low},{volume}
+func (s LevelDB) companyDailyRollupKV(exchange exchanges.Exchange, date time.Time, company *quotes.Company, quote *quotes.Quote) ([]byte, []byte) {
+	key := []byte(fmt.Sprintf("%s:%s:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern)))
+	value := []byte(fmt.Sprintf("%f,%f,%f,%f,%d"))
+	return key, value
 }
 
-func (s LevelDB) dividendKey(exchange exchanges.Exchange, company *quotes.Company, date time.Time) []byte {
-	return []byte(fmt.Sprintf("%s:%s:dividend:%s", exchange.Code(), company.Code, date.Format("20060102")))
+// company daily quote serial	key: {exchange}:{companyCode}:{date}:{Pre|Regular|Post}:{timestamp}	value:{open},{close},{high},{low},{volume}
+func (s LevelDB) companyDailySerialKV(exchange exchanges.Exchange, company *quotes.Company, date time.Time, serialType quotes.SerialType) ([]byte, []byte) {
+	return []byte(fmt.Sprintf("%s:%s:%s:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern), serialType.String()))
 }
 
-func (s LevelDB) splitKey(exchange exchanges.Exchange, company *quotes.Company, date time.Time) []byte {
-	return []byte(fmt.Sprintf("%s:%s:split:%s", exchange.Code(), company.Code, date.Format("20060102")))
+func (s LevelDB) dividendKey(exchange exchanges.Exchange, company *quotes.Company, date time.Time) ([]byte, []byte) {
+	return []byte(fmt.Sprintf("%s:%s:dividend:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern)))
+}
+
+func (s LevelDB) splitKey(exchange exchanges.Exchange, company *quotes.Company, date time.Time) ([]byte, []byte) {
+	return []byte(fmt.Sprintf("%s:%s:split:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern)))
 }
 
 // Exists check quote exists
 func (s LevelDB) Exists(exchange exchanges.Exchange, date time.Time) (bool, error) {
-	return s.db.Has(s.exchangeKey(exchange, date), nil)
+	key := []byte(fmt.Sprintf("%s:%s", exchange.Code(), date.Format(constants.DatePattern)))
+	return s.db.Has(key, nil)
 }
 
 // Save save exchange daily quote
@@ -131,7 +151,9 @@ func (s LevelDB) Save(exchange exchanges.Exchange, date time.Time, edq *quotes.E
 func (s LevelDB) createSaveBatch(exchange exchanges.Exchange, date time.Time, edq *quotes.ExchangeDailyQuote) (*leveldb.Batch, error) {
 	batch := new(leveldb.Batch)
 
-	// save companies
+	// save exchange daily
+
+	// save exchange daily companies
 	buffer := new(bytes.Buffer)
 	bw := bio.NewBinaryWriter(buffer)
 
@@ -158,7 +180,7 @@ func (s LevelDB) createSaveBatch(exchange exchanges.Exchange, date time.Time, ed
 	}
 	batch.Put(s.exchangeKey(exchange, date), buffer.Bytes())
 
-	// save quotes
+	// save exchange daily company quotes
 	for _, cdq := range edq.Quotes {
 		err = s.saveCompanyDailyQuote(batch, exchange, date, cdq)
 		if err != nil {

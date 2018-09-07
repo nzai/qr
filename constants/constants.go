@@ -3,10 +3,12 @@ package constants
 import "time"
 
 const (
-	// RetryCount 重试次数
+	// RetryCount defind retry count
 	RetryCount = 6
-	// RetryInterval 重试间隔
+	// RetryInterval define retry intervals
 	RetryInterval = time.Second * 10
-	// DefaultParallel 缺省并发数
+	// DefaultParallel define default parallel
 	DefaultParallel = 64
+	// DatePattern define date compact pattern
+	DatePattern = "20060102"
 )
