@@ -3,7 +3,6 @@ package exchanges
 import (
 	"encoding/csv"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -36,7 +35,7 @@ func (s Nyse) Location() *time.Location {
 }
 
 // Companies get exchange companies
-func (s Nyse) Companies() ([]*quotes.Company, error) {
+func (s Nyse) Companies() (map[string]*quotes.Company, error) {
 	url := "http://www.nasdaq.com/screening/companies-by-industry.aspx?exchange=NYSE&render=download"
 
 	// download csv from nasdaq
@@ -52,14 +51,11 @@ func (s Nyse) Companies() ([]*quotes.Company, error) {
 		return nil, err
 	}
 
-	// sort companies by code
-	sort.Sort(quotes.CompanyList(companies))
-
 	return companies, nil
 }
 
 // parseCSV parse result csv
-func (s Nyse) parseCSV(content string) ([]*quotes.Company, error) {
+func (s Nyse) parseCSV(content string) (map[string]*quotes.Company, error) {
 
 	reader := csv.NewReader(strings.NewReader(content))
 	records, err := reader.ReadAll()
@@ -68,8 +64,7 @@ func (s Nyse) parseCSV(content string) ([]*quotes.Company, error) {
 		return nil, err
 	}
 
-	dict := make(map[string]bool, 0)
-	var companies []*quotes.Company
+	companies := make(map[string]*quotes.Company)
 	for _, parts := range records[1:] {
 		if len(parts) < 2 {
 			zap.L().Error("csv format invalid", zap.Strings("parts", parts))
@@ -81,15 +76,14 @@ func (s Nyse) parseCSV(content string) ([]*quotes.Company, error) {
 		}
 
 		// remove duplicated
-		if _, found := dict[parts[0]]; found {
+		if _, found := companies[strings.TrimSpace(parts[0])]; found {
 			continue
 		}
-		dict[parts[0]] = true
 
-		companies = append(companies, &quotes.Company{
+		companies[strings.TrimSpace(parts[0])] = &quotes.Company{
 			Code: strings.TrimSpace(parts[0]),
 			Name: strings.TrimSpace(parts[1]),
-		})
+		}
 	}
 
 	return companies, nil

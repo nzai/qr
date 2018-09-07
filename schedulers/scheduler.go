@@ -153,7 +153,7 @@ func (s Scheduler) crawl(exchange exchanges.Exchange, dates ...time.Time) error 
 }
 
 // crawlOneDay crawl exchange quotes in special day
-func (s Scheduler) crawlOneDay(exchange exchanges.Exchange, companies []*quotes.Company, date time.Time) error {
+func (s Scheduler) crawlOneDay(exchange exchanges.Exchange, companies map[string]*quotes.Company, date time.Time) error {
 	// crawl
 	cdqs, err := s.crawlCompaniesDailyQuote(exchange, companies, date)
 	if err != nil {
@@ -165,17 +165,14 @@ func (s Scheduler) crawlOneDay(exchange exchanges.Exchange, companies []*quotes.
 	}
 
 	// make empty companies map if is not trading day
-	companyMap := make(map[string]*quotes.Company, len(companies))
-	if len(cdqs) > 0 {
-		for _, company := range companies {
-			companyMap[company.Code] = company
-		}
+	if len(cdqs) == 0 {
+		companies = make(map[string]*quotes.Company)
 	}
 
 	edq := &quotes.ExchangeDailyQuote{
 		Exchange:  exchange.Code(),
 		Date:      date,
-		Companies: companyMap,
+		Companies: companies,
 		Quotes:    cdqs,
 	}
 
@@ -200,7 +197,7 @@ func (s Scheduler) crawlOneDay(exchange exchanges.Exchange, companies []*quotes.
 }
 
 // crawlCompaniesDailyQuote crawl company quotes in special day
-func (s Scheduler) crawlCompaniesDailyQuote(exchange exchanges.Exchange, companies []*quotes.Company, date time.Time) (map[string]*quotes.CompanyDailyQuote, error) {
+func (s Scheduler) crawlCompaniesDailyQuote(exchange exchanges.Exchange, companies map[string]*quotes.Company, date time.Time) (map[string]*quotes.CompanyDailyQuote, error) {
 	// limiter
 	ch := make(chan bool, constants.DefaultParallel)
 	defer close(ch)

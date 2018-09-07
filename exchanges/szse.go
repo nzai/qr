@@ -3,7 +3,6 @@ package exchanges
 import (
 	"errors"
 	"regexp"
-	"sort"
 	"time"
 
 	"github.com/guotie/gogb2312"
@@ -40,7 +39,7 @@ func (s Szse) Location() *time.Location {
 }
 
 // Companies get exchange companies
-func (s Szse) Companies() ([]*quotes.Company, error) {
+func (s Szse) Companies() (map[string]*quotes.Company, error) {
 
 	url := "http://www.szse.cn/szseWeb/ShowReport.szse?SHOWTYPE=EXCEL&CATALOGID=1110&tab1PAGENUM=1&ENCODE=1&TABKEY=tab1"
 
@@ -63,29 +62,24 @@ func (s Szse) Companies() ([]*quotes.Company, error) {
 		return nil, err
 	}
 
-	// sort companies by code
-	sort.Sort(quotes.CompanyList(companies))
-
 	return companies, nil
 }
 
 // parse parse result html
-func (s Szse) parse(html string) ([]*quotes.Company, error) {
+func (s Szse) parse(html string) (map[string]*quotes.Company, error) {
 
 	// match by regex
 	regex := regexp.MustCompile(`\' ><td  align='center'  >(\d{6})</td><td  align='center'  >([^<]*?)</td>`)
 	group := regex.FindAllStringSubmatch(html, -1)
 
-	dict := make(map[string]bool, 0)
-	var companies []*quotes.Company
+	companies := make(map[string]*quotes.Company)
 	for _, section := range group {
 		// remove duplicated
 		if _, found := dict[section[1]]; found {
 			continue
 		}
-		dict[section[1]] = true
 
-		companies = append(companies, &quotes.Company{Code: section[1], Name: section[2]})
+		companies[section[1]] = &quotes.Company{Code: section[1], Name: section[2]}
 	}
 
 	if len(companies) == 0 {

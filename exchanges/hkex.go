@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"sort"
 	"time"
 
 	"github.com/nzai/netop"
@@ -36,7 +35,7 @@ func (s Hkex) Location() *time.Location {
 }
 
 // Companies get exchange companies
-func (s Hkex) Companies() ([]*quotes.Company, error) {
+func (s Hkex) Companies() (map[string]*quotes.Company, error) {
 
 	source := map[string]string{
 		"http://www.hkex.com.hk/Market-Data/Securities-Prices/Equities?sc_lang=zh-HK":                      "https://www1.hkex.com.hk/hkexwidget/data/getequityfilter?lang=chi&token=%s&sort=5&order=0&all=1&qid=%d&callback=3322", // 股本證券
@@ -47,7 +46,7 @@ func (s Hkex) Companies() ([]*quotes.Company, error) {
 		"http://www.hkex.com.hk/Market-Data/Securities-Prices/Debt-Securities?sc_lang=zh-hk":               "https://www1.hkex.com.hk/hkexwidget/data/getdebtfilter?lang=chi&token=%s&sort=0&order=1&all=1&qid=%d&callback=3322",   // 債務證券
 	}
 
-	var companies []*quotes.Company
+	companies := make(map[string]*quotes.Company)
 	for page, api := range source {
 		_companies, err := s.queryCompanies(page, api)
 		if err != nil {
@@ -55,11 +54,15 @@ func (s Hkex) Companies() ([]*quotes.Company, error) {
 			return nil, err
 		}
 
-		companies = append(companies, _companies...)
-	}
+		for _, company := range _companies {
+			// remove duplicated
+			if _, found := companies[company.Code]; found {
+				continue
+			}
 
-	// sort companies by code
-	sort.Sort(quotes.CompanyList(companies))
+			companies[company.Code] = company
+		}
+	}
 
 	return companies, nil
 }

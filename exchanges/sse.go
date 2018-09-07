@@ -3,7 +3,6 @@ package exchanges
 import (
 	"errors"
 	"regexp"
-	"sort"
 	"time"
 
 	"github.com/guotie/gogb2312"
@@ -40,7 +39,7 @@ func (s Sse) Location() *time.Location {
 }
 
 // Companies get exchange companies
-func (s Sse) Companies() ([]*quotes.Company, error) {
+func (s Sse) Companies() (map[string]*quotes.Company, error) {
 
 	urls := []string{
 		"http://query.sse.com.cn/security/stock/downloadStockListFile.do?csrcCode=&stockCode=&areaName=&stockType=1",
@@ -48,7 +47,7 @@ func (s Sse) Companies() ([]*quotes.Company, error) {
 	}
 	referer := "http://www.sse.com.cn/assortment/stock/list/share/"
 
-	var list []*quotes.Company
+	result := make(map[string]*quotes.Company)
 	for _, url := range urls {
 
 		// download html from sse
@@ -64,13 +63,17 @@ func (s Sse) Companies() ([]*quotes.Company, error) {
 			return nil, err
 		}
 
-		list = append(list, companies...)
+		for _, company := range companies {
+			// remove duplicated
+			if _, found := result[company.Code]; found {
+				continue
+			}
+
+			result[company.Code] = company
+		}
 	}
 
-	// sort companies by code
-	sort.Sort(quotes.CompanyList(list))
-
-	return list, nil
+	return result, nil
 }
 
 // parse parse result html
