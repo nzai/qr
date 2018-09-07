@@ -7,8 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nzai/qr/utils"
-
 	"github.com/nzai/qr/constants"
 	"github.com/nzai/qr/exchanges"
 	"github.com/nzai/qr/quotes"
@@ -21,8 +19,8 @@ import (
 // exchange daily companies		key: {exchange}:{date}:{companyCode}								value:{companyName}
 // company daily rollup quote	key: {exchange}:{companyCode}:{date} 								value:{open},{close},{high},{low},{volume}
 // company daily quote serial	key: {exchange}:{companyCode}:{date}:{Pre|Regular|Post}:{timestamp}	value:{open},{close},{high},{low},{volume}
-// company daily dividend		key: {exchange}:{companyCode}:dividend:{date}						value:{amount}
-// company daily split			key: {exchange}:{companyCode}:split:{date}							value:{numerator},{denominator}
+// company daily dividend		key: {exchange}:{companyCode}:dividend:{date}						value:{timestamp},{amount}
+// company daily split			key: {exchange}:{companyCode}:split:{date}							value:{timestamp},{numerator},{denominator}
 
 // LevelDB level db store
 type LevelDB struct {
@@ -150,17 +148,17 @@ func (s LevelDB) createSaveBatch(exchange exchanges.Exchange, date time.Time, ed
 			s.createQuoteBuffer(*rollup))
 
 		// save dividend
-		// key: {exchange}:{companyCode}:dividend:{date} value:{amount}
+		// key: {exchange}:{companyCode}:dividend:{date} value:{timestamp},{amount}
 		if cdq.Dividend != nil && cdq.Dividend.Enable {
 			batch.Put([]byte(fmt.Sprintf("%s:%s:dividend:%s", exchange.Code(), cdq.Company.Code, date.Format(constants.DatePattern))),
-				[]byte(fmt.Sprintf("%f", cdq.Dividend.Amount)))
+				[]byte(fmt.Sprintf("%d,%f", cdq.Dividend.Timestamp, cdq.Dividend.Amount)))
 		}
 
 		// save split
-		// key: {exchange}:{companyCode}:split:{date} value:{numerator},{denominator}
+		// key: {exchange}:{companyCode}:split:{date} value:{timestamp},{numerator},{denominator}
 		if cdq.Split != nil && cdq.Split.Enable {
 			batch.Put([]byte(fmt.Sprintf("%s:%s:split:%s", exchange.Code(), cdq.Company.Code, date.Format(constants.DatePattern))),
-				[]byte(fmt.Sprintf("%f,%f", cdq.Split.Numerator, cdq.Split.Denominator)))
+				[]byte(fmt.Sprintf("%d,%f,%f", cdq.Split.Timestamp, cdq.Split.Numerator, cdq.Split.Denominator)))
 		}
 
 		// save pre
@@ -342,7 +340,7 @@ func (s LevelDB) loadCompanyQuotes(reader leveldb.Reader, exchange exchanges.Exc
 }
 
 func (s LevelDB) loadCompanyDividend(reader leveldb.Reader, exchange exchanges.Exchange, date time.Time, company *quotes.Company) (*quotes.Dividend, error) {
-	// key: {exchange}:{companyCode}:dividend:{date} value:{amount}
+	// key: {exchange}:{companyCode}:dividend:{date} value:{timestamp},{amount}
 	dividend := &quotes.Dividend{Enable: false, Timestamp: 0, Amount: 0}
 	value, err := reader.Get([]byte(fmt.Sprintf("%s:%s:dividend:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern))), nil)
 	if err != nil {
@@ -358,7 +356,7 @@ func (s LevelDB) loadCompanyDividend(reader leveldb.Reader, exchange exchanges.E
 		return nil, err
 	}
 
-	amount, err := strconv.ParseFloat(string(value), 32)
+	_, err = fmt.Sscanf(string(value), "%d,%f", &dividend.Timestamp, &dividend.Amount)
 	if err != nil {
 		zap.L().Error("parse company dividend failed",
 			zap.Error(err),
@@ -370,14 +368,11 @@ func (s LevelDB) loadCompanyDividend(reader leveldb.Reader, exchange exchanges.E
 	}
 
 	dividend.Enable = true
-	dividend.Timestamp = uint64(utils.TodayZero(date).Unix())
-	dividend.Amount = float32(amount)
-
 	return dividend, nil
 }
 
 func (s LevelDB) loadCompanySplit(reader leveldb.Reader, exchange exchanges.Exchange, date time.Time, company *quotes.Company) (*quotes.Split, error) {
-	// key: {exchange}:{companyCode}:split:{date} value:{numerator},{denominator}
+	// key: {exchange}:{companyCode}:split:{date} value:{timestamp},{numerator},{denominator}
 	split := &quotes.Split{Enable: false, Timestamp: 0, Numerator: 0, Denominator: 0}
 	value, err := reader.Get([]byte(fmt.Sprintf("%s:%s:split:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern))), nil)
 	if err != nil {
@@ -393,7 +388,7 @@ func (s LevelDB) loadCompanySplit(reader leveldb.Reader, exchange exchanges.Exch
 		return nil, err
 	}
 
-	_, err = fmt.Sscanf(string(value), "%f,%f", &split.Numerator, &split.Denominator)
+	_, err = fmt.Sscanf(string(value), "%d,%f,%f", &split.Timestamp, &split.Numerator, &split.Denominator)
 	if err != nil {
 		zap.L().Error("parse company split failed",
 			zap.Error(err),
@@ -405,8 +400,6 @@ func (s LevelDB) loadCompanySplit(reader leveldb.Reader, exchange exchanges.Exch
 	}
 
 	split.Enable = true
-	split.Timestamp = uint64(utils.TodayZero(date).Unix())
-
 	return split, nil
 }
 

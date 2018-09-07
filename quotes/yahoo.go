@@ -2,7 +2,6 @@ package quotes
 
 import (
 	"errors"
-	"time"
 
 	"go.uber.org/zap"
 )
@@ -123,16 +122,8 @@ func (q YahooQuote) ToCompanyDailyQuote(company *Company, start, end uint64) *Co
 			continue
 		}
 
-		if dividend.Date != start {
-			zap.L().Info("truncate split date",
-				zap.Time("from", time.Unix(int64(dividend.Date), 0)),
-				zap.Time("to", time.Unix(int64(start), 0)),
-				zap.Any("company", company))
-		}
-
 		cdq.Dividend.Enable = true
-		// truncate timestamp to zero clock
-		cdq.Dividend.Timestamp = start
+		cdq.Dividend.Timestamp = dividend.Date
 		cdq.Dividend.Amount = dividend.Amount
 		break
 	}
@@ -142,16 +133,8 @@ func (q YahooQuote) ToCompanyDailyQuote(company *Company, start, end uint64) *Co
 			continue
 		}
 
-		if split.Date != start {
-			zap.L().Info("truncate split date",
-				zap.Time("from", time.Unix(int64(split.Date), 0)),
-				zap.Time("to", time.Unix(int64(start), 0)),
-				zap.Any("company", company))
-		}
-
 		cdq.Split.Enable = true
-		// truncate timestamp to zero clock
-		cdq.Split.Timestamp = start
+		cdq.Split.Timestamp = split.Date
 		cdq.Split.Numerator = float32(split.Numerator)
 		cdq.Split.Denominator = float32(split.Denominator)
 		break
