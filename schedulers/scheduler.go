@@ -8,6 +8,7 @@ import (
 	"github.com/nzai/qr/exchanges"
 	"github.com/nzai/qr/quotes"
 	"github.com/nzai/qr/stores"
+	"github.com/nzai/qr/utils"
 	"go.uber.org/zap"
 )
 
@@ -42,22 +43,11 @@ func (s Scheduler) Run(start time.Time) *sync.WaitGroup {
 	return wg
 }
 
-// todayZero truncate time to today zero clock
-func (s Scheduler) todayZero(now time.Time) time.Time {
-	_, offset := now.Zone()
-	return now.Truncate(time.Hour * 24).Add(-time.Second * time.Duration(offset))
-}
-
-// tomorrowZero round time to tomorrow zero clock
-func (s Scheduler) tomorrowZero(now time.Time) time.Time {
-	return s.todayZero(now).AddDate(0, 0, 1)
-}
-
 // historyJob crawl exchange history quotes
 func (s Scheduler) historyJob(wg *sync.WaitGroup, exchange exchanges.Exchange, start time.Time) {
 	// fix start time
-	start = s.todayZero(start.In(exchange.Location()))
-	end := s.todayZero(time.Now().In(exchange.Location())).AddDate(0, 0, -1)
+	start = utils.TodayZero(start.In(exchange.Location()))
+	end := utils.TodayZero(time.Now().In(exchange.Location())).AddDate(0, 0, -1)
 	zap.L().Info("exchange history job start",
 		zap.String("exchange", exchange.Code()),
 		zap.Time("start", start),
@@ -95,7 +85,7 @@ func (s Scheduler) historyJob(wg *sync.WaitGroup, exchange exchanges.Exchange, s
 // dailyJob crawl exchange daily qoutes
 func (s Scheduler) dailyJob(wg *sync.WaitGroup, exchange exchanges.Exchange) {
 	now := time.Now().In(exchange.Location())
-	duration2Tomorrow := s.tomorrowZero(now).Sub(now)
+	duration2Tomorrow := utils.TomorrowZero(now).Sub(now)
 	zap.L().Info("exchange daily job start",
 		zap.String("exchange", exchange.Code()),
 		zap.Duration("in", duration2Tomorrow))
@@ -103,7 +93,7 @@ func (s Scheduler) dailyJob(wg *sync.WaitGroup, exchange exchanges.Exchange) {
 	for {
 		// wait for tomorrow zero clock
 		beforeCrawl := <-time.After(duration2Tomorrow)
-		yesterday := s.todayZero(now.In(exchange.Location()))
+		yesterday := utils.TodayZero(now.In(exchange.Location()))
 		zap.L().Info("exchange daily job start",
 			zap.String("exchange", exchange.Code()),
 			zap.Time("date", yesterday))
@@ -112,7 +102,7 @@ func (s Scheduler) dailyJob(wg *sync.WaitGroup, exchange exchanges.Exchange) {
 		err := s.crawl(exchange, yesterday)
 
 		afterCrawl := time.Now().In(exchange.Location())
-		duration2Tomorrow = s.tomorrowZero(afterCrawl).Sub(afterCrawl)
+		duration2Tomorrow = utils.TomorrowZero(afterCrawl).Sub(afterCrawl)
 		if err != nil {
 			zap.L().Error("exchange daily job failed",
 				zap.Error(err),
@@ -174,9 +164,12 @@ func (s Scheduler) crawlOneDay(exchange exchanges.Exchange, companies []*quotes.
 		return err
 	}
 
+	// make empty companies map if is not trading day
 	companyMap := make(map[string]*quotes.Company, len(companies))
-	for _, company := range companies {
-		companyMap[company.Code] = company
+	if len(cdqs) > 0 {
+		for _, company := range companies {
+			companyMap[company.Code] = company
+		}
 	}
 
 	edq := &quotes.ExchangeDailyQuote{
@@ -221,7 +214,7 @@ func (s Scheduler) crawlCompaniesDailyQuote(exchange exchanges.Exchange, compani
 		go func(_company *quotes.Company) {
 			cdq, err := exchange.Crawl(_company, date)
 			// ignore error
-			if err == nil {
+			if err == nil && !cdq.IsEmpty() {
 				mutex.Lock()
 				cdqs[_company.Code] = cdq
 				mutex.Unlock()
