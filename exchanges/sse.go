@@ -87,8 +87,15 @@ func (s Sse) parse(text string) ([]*quotes.Company, error) {
 	regex := regexp.MustCompile(`(\d{6})	  (\S+)	  \d{6}	  \S+`)
 	group := regex.FindAllStringSubmatch(converted, -1)
 
+	dict := make(map[string]bool, 0)
 	var companies []*quotes.Company
 	for _, section := range group {
+		// remove duplicated
+		if _, found := dict[section[1]]; found {
+			continue
+		}
+		dict[section[1]] = true
+
 		companies = append(companies, &quotes.Company{Code: section[1], Name: section[2]})
 	}
 

@@ -76,8 +76,15 @@ func (s Szse) parse(html string) ([]*quotes.Company, error) {
 	regex := regexp.MustCompile(`\' ><td  align='center'  >(\d{6})</td><td  align='center'  >([^<]*?)</td>`)
 	group := regex.FindAllStringSubmatch(html, -1)
 
+	dict := make(map[string]bool, 0)
 	var companies []*quotes.Company
 	for _, section := range group {
+		// remove duplicated
+		if _, found := dict[section[1]]; found {
+			continue
+		}
+		dict[section[1]] = true
+
 		companies = append(companies, &quotes.Company{Code: section[1], Name: section[2]})
 	}
 
