@@ -3,22 +3,26 @@ package stores
 import (
 	"bytes"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
-	"github.com/nzai/bio"
+	"github.com/nzai/qr/utils"
+
 	"github.com/nzai/qr/constants"
 	"github.com/nzai/qr/exchanges"
 	"github.com/nzai/qr/quotes"
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/util"
 	"go.uber.org/zap"
 )
 
-// exchange daily				key: {exchange}:{date}												value: 1 / 0 (is trading day)
+// exchange daily				key: {exchange}:{date}												value:1 / 0 (is trading day)
 // exchange daily companies		key: {exchange}:{date}:{companyCode}								value:{companyName}
 // company daily rollup quote	key: {exchange}:{companyCode}:{date} 								value:{open},{close},{high},{low},{volume}
 // company daily quote serial	key: {exchange}:{companyCode}:{date}:{Pre|Regular|Post}:{timestamp}	value:{open},{close},{high},{low},{volume}
-// company daily dividend		key: {exchange}:{companyCode}:dividend:{date}						value:{timestamp},{amount}
-// company daily split			key: {exchange}:{companyCode}:split:{date}							value:{timestamp},{numerator},{denominator}
+// company daily dividend		key: {exchange}:{companyCode}:dividend:{date}						value:{amount}
+// company daily split			key: {exchange}:{companyCode}:split:{date}							value:{numerator},{denominator}
 
 // LevelDB level db store
 type LevelDB struct {
@@ -43,43 +47,6 @@ func (s LevelDB) Close() error {
 	return s.db.Close()
 }
 
-// exchangeDailyKV create exchange daily kv, key is {exchange}:{date}, value is 1(is trading day) or 0
-func (s LevelDB) exchangeDailyKV(exchange exchanges.Exchange, date time.Time, isTradingDay bool) ([]byte, []byte) {
-	key := []byte(fmt.Sprintf("%s:%s", exchange.Code(), date.Format(constants.DatePattern)))
-	value := []byte{byte(0)}
-	if isTradingDay {
-		value[0] = byte(1)
-	}
-	return key, value
-}
-
-// exchangeDailyCompanyKey create exchange daily company kv, key is {exchange}:{date}:{companyCode}, value is {companyName}
-func (s LevelDB) exchangeDailyCompanyKey(exchange exchanges.Exchange, date time.Time, company *quotes.Company) ([]byte, []byte) {
-	key := []byte(fmt.Sprintf("%s:%s:%s", exchange.Code(), date.Format(constants.DatePattern), company.Code))
-	value := []byte(company.Name)
-	return key, value
-}
-
-// companyDailyRollupKV create company daily rollup quote, key is {exchange}:{companyCode}:{date}, value is {open},{close},{high},{low},{volume}
-func (s LevelDB) companyDailyRollupKV(exchange exchanges.Exchange, date time.Time, company *quotes.Company, quote *quotes.Quote) ([]byte, []byte) {
-	key := []byte(fmt.Sprintf("%s:%s:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern)))
-	value := []byte(fmt.Sprintf("%f,%f,%f,%f,%d"))
-	return key, value
-}
-
-// company daily quote serial	key: {exchange}:{companyCode}:{date}:{Pre|Regular|Post}:{timestamp}	value:{open},{close},{high},{low},{volume}
-func (s LevelDB) companyDailySerialKV(exchange exchanges.Exchange, company *quotes.Company, date time.Time, serialType quotes.SerialType) ([]byte, []byte) {
-	return []byte(fmt.Sprintf("%s:%s:%s:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern), serialType.String()))
-}
-
-func (s LevelDB) dividendKey(exchange exchanges.Exchange, company *quotes.Company, date time.Time) ([]byte, []byte) {
-	return []byte(fmt.Sprintf("%s:%s:dividend:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern)))
-}
-
-func (s LevelDB) splitKey(exchange exchanges.Exchange, company *quotes.Company, date time.Time) ([]byte, []byte) {
-	return []byte(fmt.Sprintf("%s:%s:split:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern)))
-}
-
 // Exists check quote exists
 func (s LevelDB) Exists(exchange exchanges.Exchange, date time.Time) (bool, error) {
 	key := []byte(fmt.Sprintf("%s:%s", exchange.Code(), date.Format(constants.DatePattern)))
@@ -88,15 +55,12 @@ func (s LevelDB) Exists(exchange exchanges.Exchange, date time.Time) (bool, erro
 
 // Save save exchange daily quote
 func (s LevelDB) Save(exchange exchanges.Exchange, date time.Time, edq *quotes.ExchangeDailyQuote) error {
-	// save quote
-	batch, err := s.createSaveBatch(exchange, date, edq)
-	if err != nil {
-		zap.L().Error("create save batch failed",
-			zap.Error(err),
-			zap.String("exchange", exchange.Code()),
-			zap.Time("date", date))
-		return err
-	}
+	// create quote save batch
+	batch := s.createSaveBatch(exchange, date, edq)
+	zap.L().Debug("create save batch success",
+		zap.String("exchange", exchange.Code()),
+		zap.Time("date", date),
+		zap.Int("len", batch.Len()))
 
 	trans, err := s.db.OpenTransaction()
 	if err != nil {
@@ -117,6 +81,10 @@ func (s LevelDB) Save(exchange exchanges.Exchange, date time.Time, edq *quotes.E
 		return err
 	}
 
+	zap.L().Debug("batch save success",
+		zap.String("exchange", exchange.Code()),
+		zap.Time("date", date))
+
 	// validate
 	saved, err := s.load(trans, exchange, date)
 	if err != nil {
@@ -127,6 +95,10 @@ func (s LevelDB) Save(exchange exchanges.Exchange, date time.Time, edq *quotes.E
 		return err
 	}
 
+	zap.L().Debug("load saved exchange daily quote success",
+		zap.String("exchange", exchange.Code()),
+		zap.Time("date", date))
+
 	err = edq.Equal(*saved)
 	if err != nil {
 		zap.L().Error("validate saved exchange daily quote failed",
@@ -135,6 +107,10 @@ func (s LevelDB) Save(exchange exchanges.Exchange, date time.Time, edq *quotes.E
 			zap.Time("date", date))
 		return err
 	}
+
+	zap.L().Debug("validate saved exchange daily quote success",
+		zap.String("exchange", exchange.Code()),
+		zap.Time("date", date))
 
 	err = trans.Commit()
 	if err != nil {
@@ -148,152 +124,80 @@ func (s LevelDB) Save(exchange exchanges.Exchange, date time.Time, edq *quotes.E
 	return nil
 }
 
-func (s LevelDB) createSaveBatch(exchange exchanges.Exchange, date time.Time, edq *quotes.ExchangeDailyQuote) (*leveldb.Batch, error) {
+func (s LevelDB) createSaveBatch(exchange exchanges.Exchange, date time.Time, edq *quotes.ExchangeDailyQuote) *leveldb.Batch {
 	batch := new(leveldb.Batch)
 
 	// save exchange daily
+	// key: {exchange}:{date} value:1 / 0 (is trading day)
+	if edq.IsEmpty() {
+		batch.Put([]byte(fmt.Sprintf("%s:%s", exchange.Code(), date.Format(constants.DatePattern))), []byte{0})
+		return batch
+	}
+	batch.Put([]byte(fmt.Sprintf("%s:%s", exchange.Code(), date.Format(constants.DatePattern))), []byte{1})
 
 	// save exchange daily companies
-	buffer := new(bytes.Buffer)
-	bw := bio.NewBinaryWriter(buffer)
-
-	_, err := bw.Int(len(edq.Companies))
-	if err != nil {
-		zap.L().Error("encode companies count failed",
-			zap.Error(err),
-			zap.String("exchange", exchange.Code()),
-			zap.Time("date", date),
-			zap.Any("companies", len(edq.Companies)))
-		return nil, err
-	}
-
+	// key: {exchange}:{date}:{companyCode} value:{companyName}
 	for _, company := range edq.Companies {
-		err = company.Encode(bw)
-		if err != nil {
-			zap.L().Error("encode company failed",
-				zap.Error(err),
-				zap.String("exchange", exchange.Code()),
-				zap.Time("date", date),
-				zap.Any("companies", len(edq.Companies)))
-			return nil, err
-		}
+		batch.Put([]byte(fmt.Sprintf("%s:%s:%s", exchange.Code(), date.Format(constants.DatePattern), company.Code)), []byte(company.Name))
 	}
-	batch.Put(s.exchangeKey(exchange, date), buffer.Bytes())
 
 	// save exchange daily company quotes
 	for _, cdq := range edq.Quotes {
-		err = s.saveCompanyDailyQuote(batch, exchange, date, cdq)
-		if err != nil {
-			zap.L().Error("batch save company daily companies failed",
-				zap.Error(err),
-				zap.String("exchange", exchange.Code()),
-				zap.Time("date", date),
-				zap.Any("company", cdq.Company))
-			return nil, err
+		// save company rollup
+		// key: {exchange}:{companyCode}:{date} value:{open},{close},{high},{low},{volume}
+		rollup := cdq.Regular.Rollup()
+		batch.Put([]byte(fmt.Sprintf("%s:%s:%s", exchange.Code(), cdq.Company.Code, date.Format(constants.DatePattern))),
+			s.createQuoteBuffer(*rollup))
+
+		// save dividend
+		// key: {exchange}:{companyCode}:dividend:{date} value:{amount}
+		if cdq.Dividend != nil && cdq.Dividend.Enable {
+			batch.Put([]byte(fmt.Sprintf("%s:%s:dividend:%s", exchange.Code(), cdq.Company.Code, date.Format(constants.DatePattern))),
+				[]byte(fmt.Sprintf("%f", cdq.Dividend.Amount)))
 		}
+
+		// save split
+		// key: {exchange}:{companyCode}:split:{date} value:{numerator},{denominator}
+		if cdq.Split != nil && cdq.Split.Enable {
+			batch.Put([]byte(fmt.Sprintf("%s:%s:split:%s", exchange.Code(), cdq.Company.Code, date.Format(constants.DatePattern))),
+				[]byte(fmt.Sprintf("%f,%f", cdq.Split.Numerator, cdq.Split.Denominator)))
+		}
+
+		// save pre
+		// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
+		s.saveCompanyDailyQuoteSerial(batch, exchange, cdq.Company, date, quotes.SerialTypePre, cdq.Pre)
+
+		// save regular
+		// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
+		s.saveCompanyDailyQuoteSerial(batch, exchange, cdq.Company, date, quotes.SerialTypeRegular, cdq.Regular)
+
+		// save post
+		// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
+		s.saveCompanyDailyQuoteSerial(batch, exchange, cdq.Company, date, quotes.SerialTypePost, cdq.Post)
 	}
 
-	return batch, nil
+	return batch
 }
 
-func (s LevelDB) saveCompanyDailyQuote(batch *leveldb.Batch, exchange exchanges.Exchange, date time.Time, cdq *quotes.CompanyDailyQuote) error {
-	// save company rollup
-	rollup := cdq.Regular.Rollup()
-	err := s.saveAndEncode(batch, s.companyKey(exchange, cdq.Company, date), rollup)
-	if err != nil {
-		zap.L().Error("batch save company daily quote failed",
-			zap.Error(err),
-			zap.String("exchange", exchange.Code()),
-			zap.Any("company", cdq.Company),
-			zap.Time("date", date),
-			zap.Any("quote", rollup))
-		return err
+func (s LevelDB) saveCompanyDailyQuoteSerial(batch *leveldb.Batch, exchange exchanges.Exchange, company *quotes.Company, date time.Time, serialType quotes.SerialType, serial *quotes.Serial) {
+	if serial == nil {
+		return
 	}
 
-	// save dividend
-	if cdq.Dividend.Enable {
-		err = s.saveAndEncode(batch, s.dividendKey(exchange, cdq.Company, date), cdq.Dividend)
-		if err != nil {
-			zap.L().Error("batch save company dividend failed",
-				zap.Error(err),
-				zap.String("exchange", exchange.Code()),
-				zap.Any("company", cdq.Company),
-				zap.Time("date", date),
-				zap.Any("dividend", cdq.Dividend))
-			return err
-		}
+	for _, quote := range *serial {
+		// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
+		batch.Put([]byte(fmt.Sprintf("%s:%s:%s:%s:%d",
+			exchange.Code(),
+			company.Code,
+			date.Format(constants.DatePattern),
+			serialType.String(),
+			quote.Timestamp)),
+			s.createQuoteBuffer(quote))
 	}
-
-	// save split
-	if cdq.Split.Enable {
-		err = s.saveAndEncode(batch, s.splitKey(exchange, cdq.Company, date), cdq.Split)
-		if err != nil {
-			zap.L().Error("batch save company split failed",
-				zap.Error(err),
-				zap.String("exchange", exchange.Code()),
-				zap.Any("company", cdq.Company),
-				zap.Time("date", date),
-				zap.Any("split", cdq.Split))
-			return err
-		}
-	}
-
-	// save pre
-	if len(*cdq.Pre) > 0 {
-		err = s.saveAndEncode(batch, s.companySerialKey(exchange, cdq.Company, date, quotes.SerialTypePre), cdq.Pre)
-		if err != nil {
-			zap.L().Error("batch save company daily quote pre serial failed",
-				zap.Error(err),
-				zap.String("exchange", exchange.Code()),
-				zap.Any("company", cdq.Company),
-				zap.Time("date", date),
-				zap.Int("quote", len(*cdq.Pre)))
-			return err
-		}
-	}
-
-	// save regular
-	if len(*cdq.Regular) > 0 {
-		err = s.saveAndEncode(batch, s.companySerialKey(exchange, cdq.Company, date, quotes.SerialTypeRegular), cdq.Regular)
-		if err != nil {
-			zap.L().Error("batch save company daily quote regular serial failed",
-				zap.Error(err),
-				zap.String("exchange", exchange.Code()),
-				zap.Any("company", cdq.Company),
-				zap.Time("date", date),
-				zap.Int("quote", len(*cdq.Regular)))
-			return err
-		}
-	}
-
-	// save post
-	if len(*cdq.Post) > 0 {
-		err = s.saveAndEncode(batch, s.companySerialKey(exchange, cdq.Company, date, quotes.SerialTypePost), cdq.Post)
-		if err != nil {
-			zap.L().Error("batch save company daily quote post serial failed",
-				zap.Error(err),
-				zap.String("exchange", exchange.Code()),
-				zap.Any("company", cdq.Company),
-				zap.Time("date", date),
-				zap.Int("quote", len(*cdq.Post)))
-			return err
-		}
-	}
-
-	return nil
 }
 
-func (s LevelDB) saveAndEncode(batch *leveldb.Batch, key []byte, encoder quotes.Encoder) error {
-	buffer := new(bytes.Buffer)
-	err := encoder.Encode(buffer)
-	if err != nil {
-		zap.L().Error("batch save encode failed", zap.Error(err))
-		return err
-	}
-
-	batch.Put(key, buffer.Bytes())
-
-	return nil
+func (s LevelDB) createQuoteBuffer(quote quotes.Quote) []byte {
+	return []byte(fmt.Sprintf("%f,%f,%f,%f,%d", quote.Open, quote.Close, quote.High, quote.Low, quote.Volume))
 }
 
 // Load load exchange daily quote
@@ -302,41 +206,41 @@ func (s LevelDB) Load(exchange exchanges.Exchange, date time.Time) (*quotes.Exch
 }
 
 func (s LevelDB) load(reader leveldb.Reader, exchange exchanges.Exchange, date time.Time) (*quotes.ExchangeDailyQuote, error) {
-	b, err := s.db.Get(s.exchangeKey(exchange, date), nil)
+	// load exchange daily
+	// key: {exchange}:{date} value:1 / 0 (is trading day)
+	isTradingDay, err := reader.Get([]byte(fmt.Sprintf("%s:%s", exchange.Code(), date.Format(constants.DatePattern))), nil)
 	if err != nil {
-		zap.L().Error("load exchange companies failed",
+		zap.L().Error("load exchange daily failed",
 			zap.Error(err),
 			zap.String("exchange", exchange.Code()),
 			zap.Time("date", date))
 		return nil, err
 	}
 
-	buffer := bytes.NewBuffer(b)
-	br := bio.NewBinaryReader(buffer)
-
-	// load companies
-	count, err := br.Int()
-	if err != nil {
-		zap.L().Error("decode companies count failed", zap.Error(err))
-		return nil, err
+	// is trading day
+	if bytes.Equal(isTradingDay, []byte{0}) {
+		return &quotes.ExchangeDailyQuote{
+			Exchange:  exchange.Code(),
+			Date:      date,
+			Companies: map[string]*quotes.Company{},
+			Quotes:    map[string]*quotes.CompanyDailyQuote{},
+		}, nil
 	}
 
-	companies := make(map[string]*quotes.Company, count)
-	for index := 0; index < count; index++ {
-		company := new(quotes.Company)
-		err = company.Decode(br)
-		if err != nil {
-			zap.L().Error("decode company failed", zap.Error(err))
-			return nil, err
-		}
-
-		companies[company.Code] = company
+	// load exchange daily companies
+	companies, err := s.loadExchangeDailyCompanies(reader, exchange, date)
+	if err != nil {
+		zap.L().Error("load exchange daily companies failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Time("date", date))
+		return nil, err
 	}
 
 	// load quotes
 	cdqs, err := s.loadCompanyQuotes(reader, exchange, date, companies)
 	if err != nil {
-		zap.L().Error("load market companies failed",
+		zap.L().Error("load exchange daily company quotes failed",
 			zap.Error(err),
 			zap.String("exchange", exchange.Code()),
 			zap.Time("date", date))
@@ -353,71 +257,74 @@ func (s LevelDB) load(reader leveldb.Reader, exchange exchanges.Exchange, date t
 	return edq, nil
 }
 
+func (s LevelDB) loadExchangeDailyCompanies(reader leveldb.Reader, exchange exchanges.Exchange, date time.Time) (map[string]*quotes.Company, error) {
+	// key: {exchange}:{date}:{companyCode} value:{companyName}
+	iter := reader.NewIterator(util.BytesPrefix([]byte(fmt.Sprintf("%s:%s:", exchange.Code(), date.Format(constants.DatePattern)))), nil)
+	companies := make(map[string]*quotes.Company)
+	for iter.Next() {
+		key := string(iter.Key())
+		parts := strings.Split(key, ":")
+		if len(parts) != 3 {
+			zap.L().Error("parse exchange daily companies key failed",
+				zap.String("exchange", exchange.Code()),
+				zap.Time("date", date),
+				zap.String("key", key))
+			return nil, fmt.Errorf("invalid exchange daily companies key: %s", key)
+		}
+
+		companies[parts[2]] = &quotes.Company{Code: parts[2], Name: string(iter.Value())}
+	}
+	iter.Release()
+
+	return companies, iter.Error()
+}
+
 func (s LevelDB) loadCompanyQuotes(reader leveldb.Reader, exchange exchanges.Exchange, date time.Time, companies map[string]*quotes.Company) (map[string]*quotes.CompanyDailyQuote, error) {
 	cdqs := make(map[string]*quotes.CompanyDailyQuote, len(companies))
 	for companyCode, company := range companies {
-		_, err := reader.Get(s.companyKey(exchange, company, date), nil)
-		if err == leveldb.ErrNotFound {
-			continue
-		}
-
-		// load dividend
-		dividend := &quotes.Dividend{Enable: false, Timestamp: 0, Amount: 0}
-		err = s.loadAndDecode(reader, s.dividendKey(exchange, company, date), dividend, true)
+		// load company rollup
+		// key: {exchange}:{companyCode}:{date} value:{open},{close},{high},{low},{volume}
+		_, err := reader.Get([]byte(fmt.Sprintf("%s:%s:%s", exchange.Code(), companyCode, date.Format(constants.DatePattern))), nil)
 		if err != nil {
-			zap.L().Error("load company dividend failed",
+			if err == leveldb.ErrNotFound {
+				continue
+			}
+
+			zap.L().Error("load company rollup failed",
 				zap.Error(err),
 				zap.String("exchange", exchange.Code()),
 				zap.Any("company", company),
 				zap.Time("date", date))
+			return nil, err
+		}
+
+		// load dividend
+		dividend, err := s.loadCompanyDividend(reader, exchange, date, company)
+		if err != nil {
 			return nil, err
 		}
 
 		// load split
-		split := &quotes.Split{Enable: false, Timestamp: 0, Numerator: 0, Denominator: 0}
-		err = s.loadAndDecode(reader, s.splitKey(exchange, company, date), split, true)
+		split, err := s.loadCompanySplit(reader, exchange, date, company)
 		if err != nil {
-			zap.L().Error("load company split failed",
-				zap.Error(err),
-				zap.String("exchange", exchange.Code()),
-				zap.Any("company", company),
-				zap.Time("date", date))
 			return nil, err
 		}
 
 		// load pre
-		pre := new(quotes.Serial)
-		err = s.loadAndDecode(reader, s.companySerialKey(exchange, company, date, quotes.SerialTypePre), pre, true)
+		pre, err := s.loadCompanyQuoteSerial(reader, exchange, date, company, quotes.SerialTypePre)
 		if err != nil {
-			zap.L().Error("load company pre serial failed",
-				zap.Error(err),
-				zap.String("exchange", exchange.Code()),
-				zap.Any("company", company),
-				zap.Time("date", date))
 			return nil, err
 		}
 
 		// load regular
-		regular := new(quotes.Serial)
-		err = s.loadAndDecode(reader, s.companySerialKey(exchange, company, date, quotes.SerialTypeRegular), regular, true)
+		regular, err := s.loadCompanyQuoteSerial(reader, exchange, date, company, quotes.SerialTypeRegular)
 		if err != nil {
-			zap.L().Error("load company regular serial failed",
-				zap.Error(err),
-				zap.String("exchange", exchange.Code()),
-				zap.Any("company", company),
-				zap.Time("date", date))
 			return nil, err
 		}
 
 		// load post
-		post := new(quotes.Serial)
-		err = s.loadAndDecode(reader, s.companySerialKey(exchange, company, date, quotes.SerialTypePost), post, true)
+		post, err := s.loadCompanyQuoteSerial(reader, exchange, date, company, quotes.SerialTypePost)
 		if err != nil {
-			zap.L().Error("load company post serial failed",
-				zap.Error(err),
-				zap.String("exchange", exchange.Code()),
-				zap.Any("company", company),
-				zap.Time("date", date))
 			return nil, err
 		}
 
@@ -434,28 +341,122 @@ func (s LevelDB) loadCompanyQuotes(reader leveldb.Reader, exchange exchanges.Exc
 	return cdqs, nil
 }
 
-func (s LevelDB) loadAndDecode(reader leveldb.Reader, key []byte, decoder quotes.Decoder, ignoreNotFound bool) error {
-	value, err := reader.Get(key, nil)
+func (s LevelDB) loadCompanyDividend(reader leveldb.Reader, exchange exchanges.Exchange, date time.Time, company *quotes.Company) (*quotes.Dividend, error) {
+	// key: {exchange}:{companyCode}:dividend:{date} value:{amount}
+	dividend := &quotes.Dividend{Enable: false, Timestamp: 0, Amount: 0}
+	value, err := reader.Get([]byte(fmt.Sprintf("%s:%s:dividend:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern))), nil)
 	if err != nil {
-		if err == leveldb.ErrNotFound && ignoreNotFound {
-			return nil
+		if err == leveldb.ErrNotFound {
+			return dividend, nil
 		}
 
-		zap.L().Error("get key failed",
+		zap.L().Error("load company dividend failed",
 			zap.Error(err),
-			zap.ByteString("key", key),
-			zap.Bool("ignoreNotFound", ignoreNotFound))
-		return err
+			zap.String("exchange", exchange.Code()),
+			zap.Any("company", company),
+			zap.Time("date", date))
+		return nil, err
 	}
 
-	buffer := bytes.NewBuffer(value)
-	err = decoder.Decode(buffer)
+	amount, err := strconv.ParseFloat(string(value), 32)
 	if err != nil {
-		zap.L().Error("decode quote failed",
+		zap.L().Error("parse company dividend failed",
 			zap.Error(err),
-			zap.ByteString("key", key))
-		return err
+			zap.String("exchange", exchange.Code()),
+			zap.Any("company", company),
+			zap.Time("date", date),
+			zap.ByteString("value", value))
+		return nil, err
 	}
 
-	return nil
+	dividend.Enable = true
+	dividend.Timestamp = uint64(utils.TodayZero(date).Unix())
+	dividend.Amount = float32(amount)
+
+	return dividend, nil
+}
+
+func (s LevelDB) loadCompanySplit(reader leveldb.Reader, exchange exchanges.Exchange, date time.Time, company *quotes.Company) (*quotes.Split, error) {
+	// key: {exchange}:{companyCode}:split:{date} value:{numerator},{denominator}
+	split := &quotes.Split{Enable: false, Timestamp: 0, Numerator: 0, Denominator: 0}
+	value, err := reader.Get([]byte(fmt.Sprintf("%s:%s:split:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern))), nil)
+	if err != nil {
+		if err == leveldb.ErrNotFound {
+			return split, nil
+		}
+
+		zap.L().Error("load company split failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Any("company", company),
+			zap.Time("date", date))
+		return nil, err
+	}
+
+	_, err = fmt.Sscanf(string(value), "%f,%f", &split.Numerator, &split.Denominator)
+	if err != nil {
+		zap.L().Error("parse company split failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Any("company", company),
+			zap.Time("date", date),
+			zap.ByteString("value", value))
+		return nil, err
+	}
+
+	split.Enable = true
+	split.Timestamp = uint64(utils.TodayZero(date).Unix())
+
+	return split, nil
+}
+
+func (s LevelDB) loadCompanyQuoteSerial(reader leveldb.Reader, exchange exchanges.Exchange, date time.Time, company *quotes.Company, serialType quotes.SerialType) (*quotes.Serial, error) {
+	// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
+	iter := reader.NewIterator(util.BytesPrefix([]byte(fmt.Sprintf("%s:%s:%s:%s:", exchange.Code(), company.Code, date.Format(constants.DatePattern), serialType.String()))), nil)
+	serial := new(quotes.Serial)
+	*serial = make([]quotes.Quote, 0)
+	for iter.Next() {
+		quote, err := s.readQuoteBuffer(iter.Key(), iter.Value())
+		if err != nil {
+			zap.L().Error("parse company quote serial failed",
+				zap.String("exchange", exchange.Code()),
+				zap.Any("company", company),
+				zap.Time("date", date),
+				zap.String("serial type", serialType.String()),
+				zap.ByteString("key", iter.Key()),
+				zap.ByteString("value", iter.Value()))
+			return nil, err
+		}
+
+		*serial = append(*serial, *quote)
+	}
+	iter.Release()
+
+	err := iter.Error()
+	if err != nil {
+		return nil, err
+	}
+
+	return serial, nil
+}
+
+func (s LevelDB) readQuoteBuffer(key, value []byte) (*quotes.Quote, error) {
+	// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
+	parts := strings.Split(string(key), ":")
+	if len(parts) != 5 {
+		return nil, fmt.Errorf("invalid company quote serial key: %s", key)
+	}
+
+	timestamp, err := strconv.ParseUint(parts[4], 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	quote := &quotes.Quote{Timestamp: timestamp}
+	_, err = fmt.Sscanf(string(value), "%f,%f,%f,%f,%d", &quote.Open, &quote.Close, &quote.High, &quote.Low, &quote.Volume)
+	if err != nil {
+		return nil, err
+	}
+
+	return quote, nil
 }

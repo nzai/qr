@@ -170,6 +170,11 @@ func (q ExchangeDailyQuote) Equal(s ExchangeDailyQuote) error {
 	return nil
 }
 
+// IsEmpty check if exchange daily quote is empty
+func (q ExchangeDailyQuote) IsEmpty() bool {
+	return len(q.Quotes) == 0
+}
+
 // CompanyDailyQuote define company daily quote
 type CompanyDailyQuote struct {
 	Company  *Company
@@ -312,4 +317,29 @@ func (q CompanyDailyQuote) Equal(s CompanyDailyQuote) error {
 	}
 
 	return nil
+}
+
+// IsEmpty check if company daily quote is empty
+func (q CompanyDailyQuote) IsEmpty() bool {
+	if q.Pre != nil && len(*q.Pre) > 0 {
+		return false
+	}
+
+	if q.Regular != nil && len(*q.Regular) > 0 {
+		return false
+	}
+
+	if q.Post != nil && len(*q.Post) > 0 {
+		return false
+	}
+
+	if q.Dividend != nil && q.Dividend.Enable {
+		return false
+	}
+
+	if q.Split != nil && q.Split.Enable {
+		return false
+	}
+
+	return true
 }
