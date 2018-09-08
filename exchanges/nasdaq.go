@@ -15,12 +15,14 @@ import (
 
 // Nasdaq define nasdaq exchange
 type Nasdaq struct {
-	source sources.Source
+	source   sources.Source
+	location *time.Location
 }
 
 // NewNasdaq create nasdaq exchange
 func NewNasdaq() *Nasdaq {
-	return &Nasdaq{sources.NewYahooFinance()}
+	location, _ := time.LoadLocation("America/New_York")
+	return &Nasdaq{source: sources.NewYahooFinance(), location: location}
 }
 
 // Code get exchange code
@@ -30,13 +32,11 @@ func (s Nasdaq) Code() string {
 
 // Location get exchange location
 func (s Nasdaq) Location() *time.Location {
-	location, _ := time.LoadLocation("America/New_York")
-	return location
+	return s.location
 }
 
 // Companies get exchange companies
 func (s Nasdaq) Companies() (map[string]*quotes.Company, error) {
-
 	url := "http://www.nasdaq.com/screening/companies-by-industry.aspx?exchange=NASDAQ&render=download"
 
 	// download csv from nasdaq
@@ -57,7 +57,6 @@ func (s Nasdaq) Companies() (map[string]*quotes.Company, error) {
 
 // parseCSV parse result csv
 func (s Nasdaq) parseCSV(content string) (map[string]*quotes.Company, error) {
-
 	reader := csv.NewReader(strings.NewReader(content))
 	records, err := reader.ReadAll()
 	if err != nil {

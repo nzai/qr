@@ -15,15 +15,18 @@ import (
 
 // Sse define shanghai stock exchange
 type Sse struct {
-	source sources.Source
-	sd     sources.SplitDividendSource
+	source   sources.Source
+	location *time.Location
+	sd       sources.SplitDividendSource
 }
 
 // NewSse create shanghai stock exchange
 func NewSse() *Sse {
+	location, _ := time.LoadLocation("Asia/Shanghai")
 	return &Sse{
-		source: sources.NewYahooFinance(),
-		sd:     sources.NewIFengFinance(),
+		source:   sources.NewYahooFinance(),
+		location: location,
+		sd:       sources.NewIFengFinance(),
 	}
 }
 
@@ -34,13 +37,11 @@ func (s Sse) Code() string {
 
 // Location get exchange location
 func (s Sse) Location() *time.Location {
-	location, _ := time.LoadLocation("Asia/Shanghai")
-	return location
+	return s.location
 }
 
 // Companies get exchange companies
 func (s Sse) Companies() (map[string]*quotes.Company, error) {
-
 	urls := []string{
 		"http://query.sse.com.cn/security/stock/downloadStockListFile.do?csrcCode=&stockCode=&areaName=&stockType=1",
 		"http://query.sse.com.cn/security/stock/downloadStockListFile.do?csrcCode=&stockCode=&areaName=&stockType=2",
@@ -78,7 +79,6 @@ func (s Sse) Companies() (map[string]*quotes.Company, error) {
 
 // parse parse result html
 func (s Sse) parse(text string) ([]*quotes.Company, error) {
-
 	// encode html from gb2312 to utf-8
 	converted, err, _, _ := gogb2312.ConvertGB2312String(text)
 	if err != nil {

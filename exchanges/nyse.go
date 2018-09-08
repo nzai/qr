@@ -15,12 +15,14 @@ import (
 
 // Nyse define new york stock exchange
 type Nyse struct {
-	source sources.Source
+	source   sources.Source
+	location *time.Location
 }
 
 // NewNyse create new york stock exchange
 func NewNyse() *Nyse {
-	return &Nyse{sources.NewYahooFinance()}
+	location, _ := time.LoadLocation("America/New_York")
+	return &Nyse{source: sources.NewYahooFinance(), location: location}
 }
 
 // Code get exchange code
@@ -30,8 +32,7 @@ func (s Nyse) Code() string {
 
 // Location get exchange location
 func (s Nyse) Location() *time.Location {
-	location, _ := time.LoadLocation("America/New_York")
-	return location
+	return s.location
 }
 
 // Companies get exchange companies
@@ -56,7 +57,6 @@ func (s Nyse) Companies() (map[string]*quotes.Company, error) {
 
 // parseCSV parse result csv
 func (s Nyse) parseCSV(content string) (map[string]*quotes.Company, error) {
-
 	reader := csv.NewReader(strings.NewReader(content))
 	records, err := reader.ReadAll()
 	if err != nil {

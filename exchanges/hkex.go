@@ -15,12 +15,14 @@ import (
 
 // Hkex define hongkong exchange
 type Hkex struct {
-	source sources.Source
+	source   sources.Source
+	location *time.Location
 }
 
 // NewHkex create hongkong exchange
 func NewHkex() *Hkex {
-	return &Hkex{sources.NewYahooFinance()}
+	location, _ := time.LoadLocation("Asia/Hong_Kong")
+	return &Hkex{source: sources.NewYahooFinance(), location: location}
 }
 
 // Code get exchange code
@@ -30,8 +32,7 @@ func (s Hkex) Code() string {
 
 // Location get exchange location
 func (s Hkex) Location() *time.Location {
-	location, _ := time.LoadLocation("Asia/Hong_Kong")
-	return location
+	return s.location
 }
 
 // Companies get exchange companies
@@ -43,7 +44,7 @@ func (s Hkex) Companies() (map[string]*quotes.Company, error) {
 		"http://www.hkex.com.hk/Market-Data/Securities-Prices/Derivative-Warrants?sc_lang=zh-hk":           "https://www1.hkex.com.hk/hkexwidget/data/getdwfilter?lang=chi&token=%s&sort=5&order=0&all=1&qid=%d&callback=3322",     // 衍生權證
 		"http://www.hkex.com.hk/Market-Data/Securities-Prices/Callable-Bull-Bear-Contracts?sc_lang=zh-hk":  "https://www1.hkex.com.hk/hkexwidget/data/getcbbcfilter?lang=chi&token=%s&sort=5&order=0&all=1&qid=%d&callback=3322",   // 牛熊證
 		"http://www.hkex.com.hk/Market-Data/Securities-Prices/Real-Estate-Investment-Trusts?sc_lang=zh-hk": "https://www1.hkex.com.hk/hkexwidget/data/getreitfilter?lang=chi&token=%s&sort=5&order=0&all=1&qid=%d&callback=3322",   // 房地產投資信託基金
-		"http://www.hkex.com.hk/Market-Data/Securities-Prices/Debt-Securities?sc_lang=zh-hk":               "https://www1.hkex.com.hk/hkexwidget/data/getdebtfilter?lang=chi&token=%s&sort=0&order=1&all=1&qid=%d&callback=3322",   // 債務證券
+		// "http://www.hkex.com.hk/Market-Data/Securities-Prices/Debt-Securities?sc_lang=zh-hk":               "https://www1.hkex.com.hk/hkexwidget/data/getdebtfilter?lang=chi&token=%s&sort=0&order=1&all=1&qid=%d&callback=3322",   // 債務證券
 	}
 
 	companies := make(map[string]*quotes.Company)

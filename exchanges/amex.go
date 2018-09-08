@@ -15,12 +15,14 @@ import (
 
 // Amex define american stock exchange
 type Amex struct {
-	source sources.Source
+	source   sources.Source
+	location *time.Location
 }
 
 // NewAmex create american stock exchange
 func NewAmex() *Amex {
-	return &Amex{sources.NewYahooFinance()}
+	location, _ := time.LoadLocation("America/New_York")
+	return &Amex{source: sources.NewYahooFinance(), location: location}
 }
 
 // Code get exchange code
@@ -30,13 +32,11 @@ func (s Amex) Code() string {
 
 // Location get exchange location
 func (s Amex) Location() *time.Location {
-	location, _ := time.LoadLocation("America/New_York")
-	return location
+	return s.location
 }
 
 // Companies get exchange companies
 func (s Amex) Companies() (map[string]*quotes.Company, error) {
-
 	url := "http://www.nasdaq.com/screening/companies-by-industry.aspx?exchange=NASDAQ&render=download"
 
 	// download csv from nasdaq
@@ -57,7 +57,6 @@ func (s Amex) Companies() (map[string]*quotes.Company, error) {
 
 // parseCSV parse result csv
 func (s Amex) parseCSV(content string) (map[string]*quotes.Company, error) {
-
 	reader := csv.NewReader(strings.NewReader(content))
 	records, err := reader.ReadAll()
 	if err != nil {

@@ -15,15 +15,18 @@ import (
 
 // Szse define shenzhen stock exchange
 type Szse struct {
-	source sources.Source
-	sd     sources.SplitDividendSource
+	source   sources.Source
+	location *time.Location
+	sd       sources.SplitDividendSource
 }
 
 // NewSzse create shenzhen stock exchange
 func NewSzse() *Szse {
+	location, _ := time.LoadLocation("Asia/Shanghai")
 	return &Szse{
-		source: sources.NewYahooFinance(),
-		sd:     sources.NewIFengFinance(),
+		source:   sources.NewYahooFinance(),
+		location: location,
+		sd:       sources.NewIFengFinance(),
 	}
 }
 
@@ -34,13 +37,11 @@ func (s Szse) Code() string {
 
 // Location get exchange location
 func (s Szse) Location() *time.Location {
-	location, _ := time.LoadLocation("Asia/Shanghai")
-	return location
+	return s.location
 }
 
 // Companies get exchange companies
 func (s Szse) Companies() (map[string]*quotes.Company, error) {
-
 	url := "http://www.szse.cn/szseWeb/ShowReport.szse?SHOWTYPE=EXCEL&CATALOGID=1110&tab1PAGENUM=1&ENCODE=1&TABKEY=tab1"
 
 	// download html from sse
@@ -67,7 +68,6 @@ func (s Szse) Companies() (map[string]*quotes.Company, error) {
 
 // parse parse result html
 func (s Szse) parse(html string) (map[string]*quotes.Company, error) {
-
 	// match by regex
 	regex := regexp.MustCompile(`\' ><td  align='center'  >(\d{6})</td><td  align='center'  >([^<]*?)</td>`)
 	group := regex.FindAllStringSubmatch(html, -1)
