@@ -37,7 +37,7 @@ func (s Amex) Location() *time.Location {
 
 // Companies get exchange companies
 func (s Amex) Companies() (map[string]*quotes.Company, error) {
-	url := "http://www.nasdaq.com/screening/companies-by-industry.aspx?exchange=NASDAQ&render=download"
+	url := "http://www.nasdaq.com/screening/companies-by-industry.aspx?exchange=AMEX&render=download"
 
 	// download csv from nasdaq
 	csv, err := netop.GetString(url, netop.Retry(constants.RetryCount, constants.RetryInterval))
