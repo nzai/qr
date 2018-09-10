@@ -11,6 +11,7 @@ import (
 	"github.com/nzai/qr/exchanges"
 	"github.com/nzai/qr/quotes"
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"go.uber.org/zap"
 )
@@ -26,6 +27,10 @@ import (
 type LevelDB struct {
 	db *leveldb.DB
 }
+
+var (
+	levelDBReadOption = &opt.ReadOptions{DontFillCache: true}
+)
 
 // NewLevelDB create level db store
 func NewLevelDB(root string) *LevelDB {
@@ -206,7 +211,7 @@ func (s LevelDB) Load(exchange exchanges.Exchange, date time.Time) (*quotes.Exch
 func (s LevelDB) load(reader leveldb.Reader, exchange exchanges.Exchange, date time.Time) (*quotes.ExchangeDailyQuote, error) {
 	// load exchange daily
 	// key: {exchange}:{date} value:1 / 0 (is trading day)
-	isTradingDay, err := reader.Get([]byte(fmt.Sprintf("%s:%s", exchange.Code(), date.Format(constants.DatePattern))), nil)
+	isTradingDay, err := reader.Get([]byte(fmt.Sprintf("%s:%s", exchange.Code(), date.Format(constants.DatePattern))), levelDBReadOption)
 	if err != nil {
 		zap.L().Error("load exchange daily failed",
 			zap.Error(err),
@@ -257,7 +262,7 @@ func (s LevelDB) load(reader leveldb.Reader, exchange exchanges.Exchange, date t
 
 func (s LevelDB) loadExchangeDailyCompanies(reader leveldb.Reader, exchange exchanges.Exchange, date time.Time) (map[string]*quotes.Company, error) {
 	// key: {exchange}:{date}:{companyCode} value:{companyName}
-	iter := reader.NewIterator(util.BytesPrefix([]byte(fmt.Sprintf("%s:%s:", exchange.Code(), date.Format(constants.DatePattern)))), nil)
+	iter := reader.NewIterator(util.BytesPrefix([]byte(fmt.Sprintf("%s:%s:", exchange.Code(), date.Format(constants.DatePattern)))), levelDBReadOption)
 	companies := make(map[string]*quotes.Company)
 	for iter.Next() {
 		key := string(iter.Key())
@@ -282,7 +287,7 @@ func (s LevelDB) loadCompanyQuotes(reader leveldb.Reader, exchange exchanges.Exc
 	for companyCode, company := range companies {
 		// load company rollup
 		// key: {exchange}:{companyCode}:{date} value:{open},{close},{high},{low},{volume}
-		_, err := reader.Get([]byte(fmt.Sprintf("%s:%s:%s", exchange.Code(), companyCode, date.Format(constants.DatePattern))), nil)
+		_, err := reader.Get([]byte(fmt.Sprintf("%s:%s:%s", exchange.Code(), companyCode, date.Format(constants.DatePattern))), levelDBReadOption)
 		if err != nil {
 			if err == leveldb.ErrNotFound {
 				continue
@@ -342,7 +347,7 @@ func (s LevelDB) loadCompanyQuotes(reader leveldb.Reader, exchange exchanges.Exc
 func (s LevelDB) loadCompanyDividend(reader leveldb.Reader, exchange exchanges.Exchange, date time.Time, company *quotes.Company) (*quotes.Dividend, error) {
 	// key: {exchange}:{companyCode}:dividend:{date} value:{timestamp},{amount}
 	dividend := &quotes.Dividend{Enable: false, Timestamp: 0, Amount: 0}
-	value, err := reader.Get([]byte(fmt.Sprintf("%s:%s:dividend:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern))), nil)
+	value, err := reader.Get([]byte(fmt.Sprintf("%s:%s:dividend:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern))), levelDBReadOption)
 	if err != nil {
 		if err == leveldb.ErrNotFound {
 			return dividend, nil
@@ -374,7 +379,7 @@ func (s LevelDB) loadCompanyDividend(reader leveldb.Reader, exchange exchanges.E
 func (s LevelDB) loadCompanySplit(reader leveldb.Reader, exchange exchanges.Exchange, date time.Time, company *quotes.Company) (*quotes.Split, error) {
 	// key: {exchange}:{companyCode}:split:{date} value:{timestamp},{numerator},{denominator}
 	split := &quotes.Split{Enable: false, Timestamp: 0, Numerator: 0, Denominator: 0}
-	value, err := reader.Get([]byte(fmt.Sprintf("%s:%s:split:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern))), nil)
+	value, err := reader.Get([]byte(fmt.Sprintf("%s:%s:split:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern))), levelDBReadOption)
 	if err != nil {
 		if err == leveldb.ErrNotFound {
 			return split, nil
@@ -405,7 +410,8 @@ func (s LevelDB) loadCompanySplit(reader leveldb.Reader, exchange exchanges.Exch
 
 func (s LevelDB) loadCompanyQuoteSerial(reader leveldb.Reader, exchange exchanges.Exchange, date time.Time, company *quotes.Company, serialType quotes.SerialType) (*quotes.Serial, error) {
 	// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
-	iter := reader.NewIterator(util.BytesPrefix([]byte(fmt.Sprintf("%s:%s:%s:%s:", exchange.Code(), company.Code, date.Format(constants.DatePattern), serialType.String()))), nil)
+	prefix := util.BytesPrefix([]byte(fmt.Sprintf("%s:%s:%s:%s:", exchange.Code(), company.Code, date.Format(constants.DatePattern), serialType.String())))
+	iter := reader.NewIterator(prefix, levelDBReadOption)
 	serial := new(quotes.Serial)
 	*serial = make([]quotes.Quote, 0)
 	for iter.Next() {
