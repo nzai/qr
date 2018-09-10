@@ -10,6 +10,7 @@ require (
 	github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db // indirect
 	github.com/guotie/gogb2312 v0.0.0-20160513031741-a052a05f3e7e
 	github.com/hpcloud/tail v1.0.0 // indirect
+	github.com/kr/pretty v0.1.0 // indirect
 	github.com/nzai/bio v0.1.2
 	github.com/nzai/netop v0.1.1
 	github.com/onsi/ginkgo v1.6.0 // indirect
@@ -25,10 +26,11 @@ require (
 	go.uber.org/atomic v1.3.2 // indirect
 	go.uber.org/multierr v1.1.0 // indirect
 	go.uber.org/zap v1.9.1
-	golang.org/x/net v0.0.0-20180826012351-8a410e7b638d // indirect
+	golang.org/x/net v0.0.0-20180906233101-161cd47e91fd // indirect
 	golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f // indirect
-	golang.org/x/sys v0.0.0-20180905064716-d9c697bf0b2a // indirect
+	golang.org/x/sys v0.0.0-20180909124046-d0be0721c37e // indirect
 	golang.org/x/text v0.3.0 // indirect
+	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/fsnotify.v1 v1.4.7 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v2 v2.2.1 // indirect
