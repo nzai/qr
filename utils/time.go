@@ -12,3 +12,8 @@ func TodayZero(now time.Time) time.Time {
 func TomorrowZero(now time.Time) time.Time {
 	return TodayZero(now).AddDate(0, 0, 1)
 }
+
+// YesterdayZero truncate time to yesterday zero clock
+func YesterdayZero(now time.Time) time.Time {
+	return TodayZero(now).AddDate(0, 0, -1)
+}

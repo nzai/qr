@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nzai/qr/utils"
+
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
@@ -60,19 +62,17 @@ func main() {
 	lambda.Start(list.Handler)
 }
 
-// Config 配置
+// Config define lambda config
 type Config struct {
 	ExchangeCodes   []string
 	AccessKeyID     string
 	SecretAccessKey string
 	Region          string
 	MaxRetry        int
-	Bucket          string
-	Parallel        int
 	QueueURL        string
 }
 
-// GetFromEnvironmentVariable 从环境变量中读取配置
+// GetFromEnvironmentVariable read config from environment variables
 func (c *Config) GetFromEnvironmentVariable() error {
 
 	exchangeCodes := strings.TrimSpace(os.Getenv("ExchangeCodes"))
@@ -100,16 +100,6 @@ func (c *Config) GetFromEnvironmentVariable() error {
 		maxRetry = constants.RetryCount
 	}
 
-	bucket := strings.TrimSpace(os.Getenv("Bucket"))
-	if bucket == "" {
-		return fmt.Errorf("Bucket invalid")
-	}
-
-	parallel, err := strconv.Atoi(strings.TrimSpace(os.Getenv("Parallel")))
-	if err != nil {
-		parallel = constants.DefaultParallel
-	}
-
 	queueURL := strings.TrimSpace(os.Getenv("QueueUrl"))
 	if queueURL == "" {
 		return fmt.Errorf("QueueUrl invalid")
@@ -120,26 +110,24 @@ func (c *Config) GetFromEnvironmentVariable() error {
 	c.SecretAccessKey = secretAccessKey
 	c.Region = region
 	c.MaxRetry = maxRetry
-	c.Bucket = bucket
-	c.Parallel = parallel
 	c.QueueURL = queueURL
 
 	return nil
 }
 
-// Lister 查询公司列表
+// Lister define list service
 type Lister struct {
 	config    *Config
 	exchanges []exchanges.Exchange
 	sqsClient *sqs.SQS
 }
 
-// NewLister 新建查询公司列表
+// NewLister create list service
 func NewLister(config *Config, exchanges []exchanges.Exchange, sqsClient *sqs.SQS) *Lister {
 	return &Lister{config, exchanges, sqsClient}
 }
 
-// Handler 处理逻辑
+// Handler process lambda event
 func (s Lister) Handler(ctx context.Context, event events.CloudWatchEvent) {
 	wg := new(sync.WaitGroup)
 	wg.Add(len(s.exchanges))
@@ -153,38 +141,36 @@ func (s Lister) listExchangeCompanies(exchange exchanges.Exchange, wg *sync.Wait
 	defer wg.Done()
 
 	start := time.Now()
-	// 交易所的昨天
-	year, month, day := time.Now().In(exchange.Location()).AddDate(0, 0, -1).Date()
-	date := time.Date(year, month, day, 0, 0, 0, 0, exchange.Location())
+	yesterday := utils.YesterdayZero(start.In(exchange.Location()))
 
 	// 获取上市公司
 	companies, err := exchange.Companies()
 	if err != nil {
-		zap.L().Error("get exchange companies failed", zap.Error(err), zap.String("exchange", exchange.Code()), zap.Time("date", date))
+		zap.L().Error("get exchange companies failed", zap.Error(err), zap.String("exchange", exchange.Code()), zap.Time("date", yesterday))
 		return
 	}
 
 	count := len(companies)
 	zap.L().Info("list companies success",
 		zap.String("exchange", exchange.Code()),
-		zap.Time("date", date),
+		zap.Time("date", yesterday),
 		zap.Int("companies", count),
 		zap.Duration("elapsed", time.Now().Sub(start)))
 
 	// 发送sqs消息
-	failedCount, err := s.send2sqs(exchange, companies, date)
+	failedCount, err := s.send2sqs(exchange, companies, yesterday)
 	if err != nil {
 		zap.L().Error("send exchange daily company message failed",
 			zap.Error(err),
 			zap.String("exchange", exchange.Code()),
-			zap.Time("date", date),
+			zap.Time("date", yesterday),
 			zap.Int("companies", count))
 		return
 	}
 
 	zap.L().Info("send exchange daily company message finished",
 		zap.String("exchange", exchange.Code()),
-		zap.Time("date", date),
+		zap.Time("date", yesterday),
 		zap.Int("companies", count),
 		zap.Int("success", count-failedCount),
 		zap.Int("failed", failedCount),
@@ -246,10 +232,4 @@ func (s Lister) send2sqs(exchange exchanges.Exchange, companies map[string]*quot
 	}
 
 	return failedCount, nil
-}
-
-// exchangeKey 交易所的key
-func (s Lister) exchangeKey(exchange exchanges.Exchange, date time.Time) string {
-	// {year}/{month}/{day}/{exchange}
-	return fmt.Sprintf("%s/%s", date.Format("2006/01/02"), exchange.Code())
 }
