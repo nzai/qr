@@ -11,4 +11,6 @@ const (
 	DefaultParallel = 64
 	// DatePattern define date compact pattern
 	DatePattern = "20060102"
+	// AwsSqsMaxBatchSize define max sqs batch size
+	AwsSqsMaxBatchSize = 10
 )
