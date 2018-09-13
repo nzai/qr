@@ -55,10 +55,10 @@ func (s LevelDB) Exists(exchange exchanges.Exchange, date time.Time) (bool, erro
 func (s LevelDB) Save(exchange exchanges.Exchange, date time.Time, edq *quotes.ExchangeDailyQuote) error {
 	// create quote save batch
 	batch := s.createSaveBatch(exchange, date, edq)
-	zap.L().Debug("create save batch success",
-		zap.String("exchange", exchange.Code()),
-		zap.Time("date", date),
-		zap.Int("len", batch.Len()))
+	// zap.L().Debug("create save batch success",
+	// 	zap.String("exchange", exchange.Code()),
+	// 	zap.Time("date", date),
+	// 	zap.Int("len", batch.Len()))
 
 	trans, err := s.db.OpenTransaction()
 	if err != nil {
@@ -79,9 +79,9 @@ func (s LevelDB) Save(exchange exchanges.Exchange, date time.Time, edq *quotes.E
 		return err
 	}
 
-	zap.L().Debug("batch save success",
-		zap.String("exchange", exchange.Code()),
-		zap.Time("date", date))
+	// zap.L().Debug("batch save success",
+	// 	zap.String("exchange", exchange.Code()),
+	// 	zap.Time("date", date))
 
 	// validate
 	saved, err := s.load(trans, exchange, date)
@@ -93,9 +93,9 @@ func (s LevelDB) Save(exchange exchanges.Exchange, date time.Time, edq *quotes.E
 		return err
 	}
 
-	zap.L().Debug("load saved exchange daily quote success",
-		zap.String("exchange", exchange.Code()),
-		zap.Time("date", date))
+	// zap.L().Debug("load saved exchange daily quote success",
+	// 	zap.String("exchange", exchange.Code()),
+	// 	zap.Time("date", date))
 
 	err = edq.Equal(*saved)
 	if err != nil {
@@ -106,9 +106,9 @@ func (s LevelDB) Save(exchange exchanges.Exchange, date time.Time, edq *quotes.E
 		return err
 	}
 
-	zap.L().Debug("validate saved exchange daily quote success",
-		zap.String("exchange", exchange.Code()),
-		zap.Time("date", date))
+	// zap.L().Debug("validate saved exchange daily quote success",
+	// 	zap.String("exchange", exchange.Code()),
+	// 	zap.Time("date", date))
 
 	err = trans.Commit()
 	if err != nil {
