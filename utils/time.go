@@ -5,7 +5,8 @@ import "time"
 // TodayZero truncate time to today zero clock
 func TodayZero(now time.Time) time.Time {
 	_, offset := now.Zone()
-	return now.Truncate(time.Hour * 24).Add(-time.Second * time.Duration(offset))
+	duration := time.Second * time.Duration(offset)
+	return now.Add(duration).Truncate(time.Hour * 24).Add(-duration)
 }
 
 // TomorrowZero round time to tomorrow zero clock

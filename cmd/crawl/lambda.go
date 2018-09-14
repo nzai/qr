@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -22,7 +24,6 @@ import (
 	"github.com/nzai/qr/exchanges"
 	"github.com/nzai/qr/messages"
 	"github.com/nzai/qr/quotes"
-	"github.com/vmihailenco/msgpack"
 	"go.uber.org/zap"
 )
 
@@ -184,7 +185,7 @@ func (s Crawler) parseMessage(message events.SQSMessage) (exchanges.Exchange, *q
 	var date time.Time
 
 	companyDaily := new(messages.CompanyDaily)
-	err := msgpack.Unmarshal([]byte(message.Body), companyDaily)
+	err := json.Unmarshal([]byte(message.Body), companyDaily)
 	if err != nil {
 		zap.L().Error("unmarshal company daily message failed", zap.Error(err), zap.Any("message", message))
 		return nil, nil, date, err
@@ -208,20 +209,29 @@ func (s Crawler) s3Key(exchange exchanges.Exchange, company *quotes.Company, dat
 func (s Crawler) crawl(exchange exchanges.Exchange, company *quotes.Company, key string, date time.Time) error {
 	// crawl
 	cdq, err := exchange.Crawl(company, date)
-	if err != nil || cdq.IsEmpty() {
+	if err != nil {
 		// just warn and return without error
 		zap.L().Warn("crawl company daily quote failed",
 			zap.Error(err),
 			zap.String("exchange", exchange.Code()),
 			zap.Any("company", company),
-			zap.Time("date", date),
-			zap.Bool("IsEmpty", cdq.IsEmpty()))
+			zap.Time("date", date))
 		return nil
 	}
 
-	buffer, err := msgpack.Marshal(cdq)
+	if cdq.IsEmpty() {
+		// just warn and return without error
+		zap.L().Warn("company daily quote is empty",
+			zap.String("exchange", exchange.Code()),
+			zap.Any("company", company),
+			zap.Time("date", date))
+		return nil
+	}
+
+	buffer := new(bytes.Buffer)
+	err = cdq.Encode(buffer)
 	if err != nil {
-		zap.L().Error("crawl company daily quote failed",
+		zap.L().Error("encode company daily quote failed",
 			zap.Error(err),
 			zap.String("exchange", exchange.Code()),
 			zap.Any("company", company),
@@ -233,7 +243,7 @@ func (s Crawler) crawl(exchange exchanges.Exchange, company *quotes.Company, key
 	_, err = s.client.PutObject(&s3.PutObjectInput{
 		Bucket:       aws.String(s.config.Bucket),
 		Key:          aws.String(key),
-		Body:         bytes.NewReader(buffer),
+		Body:         bytes.NewReader(buffer.Bytes()),
 		StorageClass: aws.String(s3.ObjectStorageClassReducedRedundancy),
 	})
 	if err != nil {
@@ -244,7 +254,79 @@ func (s Crawler) crawl(exchange exchanges.Exchange, company *quotes.Company, key
 			zap.Time("date", date),
 			zap.String("bucket", s.config.Bucket),
 			zap.String("key", key),
-			zap.Int("size", len(buffer)))
+			zap.Int("size", buffer.Len()))
+		return err
+	}
+
+	// load
+	output, err := s.client.GetObject(&s3.GetObjectInput{
+		Bucket: aws.String(s.config.Bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		zap.L().Error("load company daily quote failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Any("company", company),
+			zap.Time("date", date),
+			zap.String("bucket", s.config.Bucket),
+			zap.String("key", key))
+		return err
+	}
+	defer output.Body.Close()
+
+	buffer.Reset()
+	_, err = io.Copy(buffer, output.Body)
+	if err != nil {
+		zap.L().Error("read saved company daily quote failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Any("company", company),
+			zap.Time("date", date),
+			zap.String("bucket", s.config.Bucket),
+			zap.String("key", key))
+		return err
+	}
+
+	saved := new(quotes.CompanyDailyQuote)
+	err = saved.Decode(buffer)
+	if err != nil {
+		zap.L().Error("decode saved company daily quote failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Any("company", company),
+			zap.Time("date", date),
+			zap.String("bucket", s.config.Bucket),
+			zap.String("key", key))
+		return err
+	}
+
+	// validate
+	err = cdq.Equal(*saved)
+	if err != nil {
+		zap.L().Error("company daily quote is different from saved",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Any("company", company),
+			zap.Time("date", date),
+			zap.String("bucket", s.config.Bucket),
+			zap.String("key", key))
+
+		// delete saved
+		_, err1 := s.client.DeleteObject(&s3.DeleteObjectInput{
+			Bucket: aws.String(s.config.Bucket),
+			Key:    aws.String(key),
+		})
+		if err1 != nil {
+			zap.L().Error("delete saved company daily quote failed",
+				zap.Error(err1),
+				zap.String("exchange", exchange.Code()),
+				zap.Any("company", company),
+				zap.Time("date", date),
+				zap.String("bucket", s.config.Bucket),
+				zap.String("key", key))
+		}
+
 		return err
 	}
 

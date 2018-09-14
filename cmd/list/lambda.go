@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -21,7 +22,6 @@ import (
 	"github.com/nzai/qr/exchanges"
 	"github.com/nzai/qr/messages"
 	"github.com/nzai/qr/quotes"
-	"github.com/vmihailenco/msgpack"
 	"go.uber.org/zap"
 )
 
@@ -185,9 +185,9 @@ func (s Lister) send2sqs(exchange exchanges.Exchange, companies map[string]*quot
 
 	var failedCount int
 	index := -1
-	for code, company := range companies {
+	for _, company := range companies {
 		index++
-		body, err := msgpack.Marshal(&messages.CompanyDaily{
+		body, err := json.Marshal(&messages.CompanyDaily{
 			Exchange: exchange.Code(),
 			Company:  company,
 			Date:     date,
@@ -202,7 +202,7 @@ func (s Lister) send2sqs(exchange exchanges.Exchange, companies map[string]*quot
 		}
 
 		input.Entries = append(input.Entries, &sqs.SendMessageBatchRequestEntry{
-			Id:          aws.String(fmt.Sprintf("%s:%s", exchange.Code(), code)),
+			Id:          aws.String(fmt.Sprintf("%s-%d", exchange.Code(), index)),
 			MessageBody: aws.String(string(body)),
 		})
 
