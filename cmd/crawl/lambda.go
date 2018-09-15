@@ -244,7 +244,7 @@ func (s Crawler) crawl(exchange exchanges.Exchange, company *quotes.Company, key
 		Bucket:       aws.String(s.config.Bucket),
 		Key:          aws.String(key),
 		Body:         bytes.NewReader(buffer.Bytes()),
-		StorageClass: aws.String(s3.ObjectStorageClassReducedRedundancy),
+		StorageClass: aws.String(s3.ObjectStorageClassStandard),
 	})
 	if err != nil {
 		zap.L().Error("save company daily quote failed",
