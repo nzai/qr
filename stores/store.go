@@ -24,8 +24,8 @@ type Store interface {
 
 // Parse parse command argument
 func Parse(arg string) (Store, error) {
-	parts := strings.Split(arg, ":")
-	if len(parts) != 2 {
+	parts := strings.Split(arg, "|")
+	if len(parts) < 2 {
 		zap.L().Error("store arg invalid", zap.String("arg", arg))
 		return nil, fmt.Errorf("store arg invalid: %s", arg)
 	}
@@ -37,6 +37,12 @@ func Parse(arg string) (Store, error) {
 		return NewLevelDB(parts[1]), nil
 	case "ledis":
 		return NewLedis(parts[1]), nil
+	case "redis":
+		if len(parts) < 3 {
+			zap.L().Error("store arg invalid", zap.String("arg", arg))
+			return nil, fmt.Errorf("store arg invalid: %s", arg)
+		}
+		return NewRedis(parts[1], parts[2]), nil
 	default:
 		zap.L().Error("store type invalid", zap.String("type", parts[0]))
 		return nil, fmt.Errorf("store type invalid: %s", parts[0])
