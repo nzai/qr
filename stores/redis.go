@@ -29,9 +29,12 @@ type Redis struct {
 // NewRedis create redis store
 func NewRedis(address, password string) *Redis {
 	client := redis.NewClient(&redis.Options{
-		Addr:     address,
-		Password: password,
-		DB:       0, // use default DB
+		Addr:         address,
+		Password:     password,
+		DB:           0, // use default DB
+		MaxRetries:   3,
+		ReadTimeout:  time.Second * 15,
+		WriteTimeout: time.Second * 30,
 	})
 	return &Redis{client}
 }
@@ -62,25 +65,8 @@ func (s Redis) Exists(exchange exchanges.Exchange, date time.Time) (bool, error)
 
 // Save save exchange daily quote
 func (s Redis) Save(exchange exchanges.Exchange, date time.Time, edq *quotes.ExchangeDailyQuote) error {
-	// save exchange daily
-	isTrading := "1"
-	if edq.IsEmpty() {
-		isTrading = "0"
-	}
-
-	// key: {exchange}:{date} value:1 / 0 (is trading day)
-	err := s.client.Set(fmt.Sprintf("%s:%s", exchange.Code(), date.Format(constants.DatePattern)), isTrading, 0).Err()
-	if err != nil {
-		zap.L().Error("save exchange daily failed",
-			zap.Error(err),
-			zap.String("exchange", exchange.Code()),
-			zap.Time("date", date),
-			zap.Bool("is trading", !edq.IsEmpty()))
-		return err
-	}
-
 	// save exchange daily companies
-	err = s.saveExchangeDailyCompanies(exchange, date, edq.Companies)
+	err := s.saveExchangeDailyCompanies(exchange, date, edq.Companies)
 	if err != nil {
 		return err
 	}
@@ -138,6 +124,23 @@ func (s Redis) Save(exchange exchanges.Exchange, date time.Time, edq *quotes.Exc
 		if err != nil {
 			return err
 		}
+	}
+
+	// save exchange daily
+	isTrading := "1"
+	if edq.IsEmpty() {
+		isTrading = "0"
+	}
+
+	// key: {exchange}:{date} value:1 / 0 (is trading day)
+	err = s.client.Set(fmt.Sprintf("%s:%s", exchange.Code(), date.Format(constants.DatePattern)), isTrading, 0).Err()
+	if err != nil {
+		zap.L().Error("save exchange daily failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Time("date", date),
+			zap.Bool("is trading", !edq.IsEmpty()))
+		return err
 	}
 
 	return nil
