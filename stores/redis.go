@@ -32,9 +32,9 @@ func NewRedis(address, password string) *Redis {
 		Addr:         address,
 		Password:     password,
 		DB:           0, // use default DB
-		MaxRetries:   3,
-		ReadTimeout:  time.Second * 15,
-		WriteTimeout: time.Second * 30,
+		MaxRetries:   2,
+		ReadTimeout:  time.Minute * 2,
+		WriteTimeout: time.Minute * 2,
 	})
 	return &Redis{client}
 }
@@ -65,66 +65,8 @@ func (s Redis) Exists(exchange exchanges.Exchange, date time.Time) (bool, error)
 
 // Save save exchange daily quote
 func (s Redis) Save(exchange exchanges.Exchange, date time.Time, edq *quotes.ExchangeDailyQuote) error {
-	// save exchange daily companies
-	err := s.saveExchangeDailyCompanies(exchange, date, edq.Companies)
-	if err != nil {
-		return err
-	}
 
-	// save exchange daily company quotes
-	for _, cdq := range edq.Quotes {
-		// save company rollup
-		// key: {exchange}:{companyCode}:{date} value:{open},{close},{high},{low},{volume}
-		rollup := cdq.Regular.Rollup()
-		key := fmt.Sprintf("%s:%s:%s", exchange.Code(), cdq.Company.Code, date.Format(constants.DatePattern))
-		err = s.client.Set(key, s.formatQuote(*rollup), 0).Err()
-		if err != nil {
-			zap.L().Error("save company daily rollup failed",
-				zap.Error(err),
-				zap.String("exchange", exchange.Code()),
-				zap.Any("company", cdq.Company),
-				zap.Time("date", date),
-				zap.Any("rollup", rollup))
-			return err
-		}
-
-		// save dividend
-		if cdq.Dividend != nil && cdq.Dividend.Enable {
-			err = s.saveCompanyDividend(exchange, cdq.Company, date, cdq.Dividend)
-			if err != nil {
-				return err
-			}
-		}
-
-		// save split
-		if cdq.Split != nil && cdq.Split.Enable {
-			err = s.saveCompanySplit(exchange, cdq.Company, date, cdq.Split)
-			if err != nil {
-				return err
-			}
-		}
-
-		// save pre
-		// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
-		err = s.saveCompanyDailyQuoteSerial(exchange, cdq.Company, date, quotes.SerialTypePre, cdq.Pre)
-		if err != nil {
-			return err
-		}
-
-		// save regular
-		// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
-		err = s.saveCompanyDailyQuoteSerial(exchange, cdq.Company, date, quotes.SerialTypeRegular, cdq.Regular)
-		if err != nil {
-			return err
-		}
-
-		// save post
-		// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
-		err = s.saveCompanyDailyQuoteSerial(exchange, cdq.Company, date, quotes.SerialTypePost, cdq.Post)
-		if err != nil {
-			return err
-		}
-	}
+	var pairs []string
 
 	// save exchange daily
 	isTrading := "1"
@@ -133,22 +75,64 @@ func (s Redis) Save(exchange exchanges.Exchange, date time.Time, edq *quotes.Exc
 	}
 
 	// key: {exchange}:{date} value:1 / 0 (is trading day)
-	err = s.client.Set(fmt.Sprintf("%s:%s", exchange.Code(), date.Format(constants.DatePattern)), isTrading, 0).Err()
+	pairs = append(pairs, fmt.Sprintf("%s:%s", exchange.Code(), date.Format(constants.DatePattern)), isTrading)
+
+	// save exchange daily companies
+	pairs = append(pairs, s.saveExchangeDailyCompanies(exchange, date, edq.Companies)...)
+
+	// save exchange daily company quotes
+	for _, cdq := range edq.Quotes {
+		// save company rollup
+		// key: {exchange}:{companyCode}:{date} value:{open},{close},{high},{low},{volume}
+		rollup := cdq.Regular.Rollup()
+		key := fmt.Sprintf("%s:%s:%s", exchange.Code(), cdq.Company.Code, date.Format(constants.DatePattern))
+		pairs = append(pairs, key, s.formatQuote(*rollup))
+
+		// save dividend
+		if cdq.Dividend != nil && cdq.Dividend.Enable {
+			pairs = append(pairs, s.saveCompanyDividend(exchange, cdq.Company, date, cdq.Dividend)...)
+		}
+
+		// save split
+		if cdq.Split != nil && cdq.Split.Enable {
+			pairs = append(pairs, s.saveCompanySplit(exchange, cdq.Company, date, cdq.Split)...)
+		}
+
+		// save pre
+		// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
+		pairs = append(pairs, s.saveCompanyDailyQuoteSerial(exchange, cdq.Company, date, quotes.SerialTypePre, cdq.Pre)...)
+
+		// save regular
+		// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
+		pairs = append(pairs, s.saveCompanyDailyQuoteSerial(exchange, cdq.Company, date, quotes.SerialTypeRegular, cdq.Regular)...)
+
+		// save post
+		// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
+		pairs = append(pairs, s.saveCompanyDailyQuoteSerial(exchange, cdq.Company, date, quotes.SerialTypePost, cdq.Post)...)
+	}
+
+	err := s.client.MSet(pairs).Err()
 	if err != nil {
-		zap.L().Error("save exchange daily failed",
+		zap.L().Error("save exchange daily quote failed",
 			zap.Error(err),
 			zap.String("exchange", exchange.Code()),
 			zap.Time("date", date),
-			zap.Bool("is trading", !edq.IsEmpty()))
+			zap.Int("keys", len(pairs)/2))
 		return err
 	}
+
+	zap.L().Debug("save exchange daily quote success",
+		zap.Error(err),
+		zap.String("exchange", exchange.Code()),
+		zap.Time("date", date),
+		zap.Int("keys", len(pairs)/2))
 
 	return nil
 }
 
-func (s Redis) saveExchangeDailyCompanies(exchange exchanges.Exchange, date time.Time, companies map[string]*quotes.Company) error {
+func (s Redis) saveExchangeDailyCompanies(exchange exchanges.Exchange, date time.Time, companies map[string]*quotes.Company) []string {
 	if len(companies) == 0 {
-		return nil
+		return []string{}
 	}
 
 	// key: {exchange}:{date}:{companyCode} value:{companyName}
@@ -160,62 +144,26 @@ func (s Redis) saveExchangeDailyCompanies(exchange exchanges.Exchange, date time
 		index++
 	}
 
-	err := s.client.MSet(pairs).Err()
-	if err != nil {
-		zap.L().Error("save exchange daily companies failed",
-			zap.Error(err),
-			zap.String("exchange", exchange.Code()),
-			zap.Time("date", date),
-			zap.Int("companies", len(companies)))
-		return err
-	}
-
-	return nil
+	return pairs
 }
 
-func (s Redis) saveCompanyDividend(exchange exchanges.Exchange, company *quotes.Company, date time.Time, dividend *quotes.Dividend) error {
+func (s Redis) saveCompanyDividend(exchange exchanges.Exchange, company *quotes.Company, date time.Time, dividend *quotes.Dividend) []string {
 	// key: {exchange}:{companyCode}:dividend:{date} value:{timestamp},{amount}
 	key := fmt.Sprintf("%s:%s:dividend:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern))
 	value := fmt.Sprintf("%d,%f", dividend.Timestamp, dividend.Amount)
-	err := s.client.Set(key, value, 0).Err()
-	if err != nil {
-		zap.L().Error("save company dividend failed",
-			zap.Error(err),
-			zap.String("exchange", exchange.Code()),
-			zap.Any("company", company),
-			zap.Time("date", date),
-			zap.Any("dividend", dividend),
-			zap.String("key", key),
-			zap.String("value", value))
-		return err
-	}
-
-	return nil
+	return []string{key, value}
 }
 
-func (s Redis) saveCompanySplit(exchange exchanges.Exchange, company *quotes.Company, date time.Time, split *quotes.Split) error {
+func (s Redis) saveCompanySplit(exchange exchanges.Exchange, company *quotes.Company, date time.Time, split *quotes.Split) []string {
 	// key: {exchange}:{companyCode}:split:{date} value:{timestamp},{numerator},{denominator}
 	key := fmt.Sprintf("%s:%s:split:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern))
 	value := fmt.Sprintf("%d,%f,%f", split.Timestamp, split.Numerator, split.Denominator)
-	err := s.client.Set(key, value, 0).Err()
-	if err != nil {
-		zap.L().Error("save company split failed",
-			zap.Error(err),
-			zap.String("exchange", exchange.Code()),
-			zap.Any("company", company),
-			zap.Time("date", date),
-			zap.Any("split", split),
-			zap.String("key", key),
-			zap.String("value", value))
-		return err
-	}
-
-	return nil
+	return []string{key, value}
 }
 
-func (s Redis) saveCompanyDailyQuoteSerial(exchange exchanges.Exchange, company *quotes.Company, date time.Time, serialType quotes.SerialType, serial *quotes.Serial) error {
+func (s Redis) saveCompanyDailyQuoteSerial(exchange exchanges.Exchange, company *quotes.Company, date time.Time, serialType quotes.SerialType, serial *quotes.Serial) []string {
 	if serial == nil || len(*serial) == 0 {
-		return nil
+		return []string{}
 	}
 
 	pairs := make([]string, len(*serial)*2)
@@ -230,19 +178,7 @@ func (s Redis) saveCompanyDailyQuoteSerial(exchange exchanges.Exchange, company 
 		pairs[index*2+1] = s.formatQuote(quote)
 	}
 
-	err := s.client.MSet(pairs).Err()
-	if err != nil {
-		zap.L().Error("save company quote serial failed",
-			zap.Error(err),
-			zap.String("exchange", exchange.Code()),
-			zap.Any("company", company),
-			zap.Time("date", date),
-			zap.String("serial type", serialType.String()),
-			zap.Int("count", len(*serial)))
-		return err
-	}
-
-	return nil
+	return pairs
 }
 
 func (s Redis) formatQuote(quote quotes.Quote) string {
