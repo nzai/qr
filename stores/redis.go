@@ -33,8 +33,8 @@ func NewRedis(address, password string) *Redis {
 		Password:     password,
 		DB:           0, // use default DB
 		MaxRetries:   2,
-		ReadTimeout:  time.Minute * 2,
-		WriteTimeout: time.Minute * 2,
+		ReadTimeout:  time.Minute * 5,
+		WriteTimeout: time.Minute * 5,
 	})
 	return &Redis{client}
 }
@@ -182,7 +182,7 @@ func (s Redis) saveCompanyDailyQuoteSerial(exchange exchanges.Exchange, company 
 }
 
 func (s Redis) formatQuote(quote quotes.Quote) string {
-	return fmt.Sprintf("%f,%f,%f,%f,%d", quote.Open, quote.Close, quote.High, quote.Low, quote.Volume)
+	return fmt.Sprintf("%.3f,%.3f,%.3f,%.3f,%d", quote.Open, quote.Close, quote.High, quote.Low, quote.Volume)
 }
 
 // Load load exchange daily quote
