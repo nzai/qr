@@ -2,7 +2,7 @@ package stores
 
 import (
 	"fmt"
-	"sort"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -242,29 +242,19 @@ func (s Redis) Load(exchange exchanges.Exchange, date time.Time) (*quotes.Exchan
 func (s Redis) loadExchangeDailyCompanies(exchange exchanges.Exchange, date time.Time) (map[string]*quotes.Company, error) {
 	// key: {exchange}:{date}:{companyCode} value:{companyName}
 	prefix := fmt.Sprintf("%s:%s:", exchange.Code(), date.Format(constants.DatePattern))
-	keys, err := s.client.Keys(prefix).Result()
+	kvs, err := s.prefixScan(prefix)
 	if err != nil {
-		zap.L().Error("get exchange daily company keys failed",
+		zap.L().Error("get exchange daily company failed",
 			zap.Error(err),
 			zap.String("exchange", exchange.Code()),
 			zap.Time("date", date),
 			zap.String("prefix", prefix))
 		return nil, err
 	}
-	sort.Strings(keys)
 
-	values, err := s.client.MGet(keys...).Result()
-	if err != nil {
-		zap.L().Error("get exchange daily companies failed",
-			zap.Error(err),
-			zap.String("exchange", exchange.Code()),
-			zap.Time("date", date))
-		return nil, err
-	}
-
-	companies := make(map[string]*quotes.Company)
-	for index, key := range keys {
-		companies[key] = &quotes.Company{Code: key, Name: values[index].(string)}
+	companies := make(map[string]*quotes.Company, len(kvs))
+	for _, kv := range kvs {
+		companies[kv.Key] = &quotes.Company{Code: kv.Key, Name: kv.Value}
 	}
 
 	return companies, nil
@@ -407,9 +397,9 @@ func (s Redis) loadCompanySplit(exchange exchanges.Exchange, date time.Time, com
 func (s Redis) loadCompanyQuoteSerial(exchange exchanges.Exchange, date time.Time, company *quotes.Company, serialType quotes.SerialType) (*quotes.Serial, error) {
 	// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
 	prefix := fmt.Sprintf("%s:%s:%s:%s:", exchange.Code(), company.Code, date.Format(constants.DatePattern), serialType.String())
-	keys, err := s.client.Keys(prefix).Result()
+	kvs, err := s.prefixScan(prefix)
 	if err != nil {
-		zap.L().Error("get company quote serial keys failed",
+		zap.L().Error("get company quote serial failed",
 			zap.Error(err),
 			zap.String("exchange", exchange.Code()),
 			zap.Any("company", company),
@@ -417,22 +407,11 @@ func (s Redis) loadCompanyQuoteSerial(exchange exchanges.Exchange, date time.Tim
 			zap.String("prefix", prefix))
 		return nil, err
 	}
-	sort.Strings(keys)
-
-	values, err := s.client.MGet(keys...).Result()
-	if err != nil {
-		zap.L().Error("get company quote serial quote failed",
-			zap.Error(err),
-			zap.String("exchange", exchange.Code()),
-			zap.Any("company", company),
-			zap.Time("date", date))
-		return nil, err
-	}
 
 	serial := new(quotes.Serial)
-	*serial = make([]quotes.Quote, 0, len(values))
-	for index, key := range keys {
-		quote, err := s.scanQuote(key, values[index].(string))
+	*serial = make([]quotes.Quote, 0, len(kvs))
+	for _, kv := range kvs {
+		quote, err := s.scanQuote(kv.Value, kv.Value)
 		if err != nil {
 			zap.L().Error("parse company quote serial failed",
 				zap.Error(err),
@@ -440,8 +419,8 @@ func (s Redis) loadCompanyQuoteSerial(exchange exchanges.Exchange, date time.Tim
 				zap.Any("company", company),
 				zap.Time("date", date),
 				zap.String("serial type", serialType.String()),
-				zap.String("key", key),
-				zap.String("value", values[index].(string)))
+				zap.String("key", kv.Value),
+				zap.String("value", kv.Value))
 			return nil, err
 		}
 
@@ -470,4 +449,50 @@ func (s Redis) scanQuote(key, value string) (*quotes.Quote, error) {
 	}
 
 	return quote, nil
+}
+
+// prefixScan perform redis scan with prefix
+func (s Redis) prefixScan(prefix string) ([]KV, error) {
+	start, end := s.getScanRange(prefix)
+	// scan {start} {end} {limit}
+	result, err := s.client.Do("scan", start, end, -1).Result()
+	if err != nil {
+		zap.L().Error("redis scan failed",
+			zap.Error(err),
+			zap.String("prefix", prefix))
+		return nil, err
+	}
+
+	slice, ok := result.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("unknown scan result type: %s", reflect.TypeOf(result).String())
+	}
+
+	kvs := make([]KV, 0, len(slice)/2)
+	for index := 0; index < len(slice); index += 2 {
+		kvs = append(kvs, KV{Key: slice[index].(string), Value: slice[index+1].(string)})
+	}
+
+	return kvs, nil
+}
+
+// getScanRange create start and end pattern with prefix
+func (s Redis) getScanRange(prefix string) (string, string) {
+	slice := []byte(prefix)
+	for index := len(slice) - 1; index >= 0; index-- {
+		if slice[index] == 0xff {
+			continue
+		}
+
+		slice[index]++
+		return prefix, string(slice)
+	}
+
+	return prefix, prefix
+}
+
+// KV key value pair
+type KV struct {
+	Key   string
+	Value string
 }
