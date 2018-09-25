@@ -51,16 +51,15 @@ func (s Redis) Close() error {
 // Exists check quote exists
 func (s Redis) Exists(exchange exchanges.Exchange, date time.Time) (bool, error) {
 	key := fmt.Sprintf("%s:%s", exchange.Code(), date.Format(constants.DatePattern))
-	_, err := s.client.Get(key).Result()
-	if err == nil {
-		return true, nil
+	exists, err := s.client.Exists(key).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return false, nil
+		}
+		return false, err
 	}
 
-	if err == redis.Nil {
-		return false, nil
-	}
-
-	return false, err
+	return exists == 1, err
 }
 
 // Save save exchange daily quote

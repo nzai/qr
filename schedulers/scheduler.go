@@ -47,7 +47,7 @@ func (s Scheduler) Run(start time.Time) *sync.WaitGroup {
 func (s Scheduler) historyJob(wg *sync.WaitGroup, exchange exchanges.Exchange, start time.Time) {
 	// fix start time
 	start = utils.TodayZero(start.In(exchange.Location()))
-	end := utils.TodayZero(time.Now().In(exchange.Location())).AddDate(0, 0, -1)
+	end := utils.YesterdayZero(time.Now().In(exchange.Location()))
 	zap.L().Info("exchange history job start",
 		zap.String("exchange", exchange.Code()),
 		zap.Time("start", start),
@@ -93,7 +93,7 @@ func (s Scheduler) dailyJob(wg *sync.WaitGroup, exchange exchanges.Exchange) {
 	for {
 		// wait for tomorrow zero clock
 		beforeCrawl := <-time.After(duration2Tomorrow)
-		yesterday := utils.TodayZero(now.In(exchange.Location()))
+		yesterday := utils.YesterdayZero(beforeCrawl.In(exchange.Location()))
 		zap.L().Info("exchange daily job start",
 			zap.String("exchange", exchange.Code()),
 			zap.Time("date", yesterday))
