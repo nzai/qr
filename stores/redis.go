@@ -14,12 +14,12 @@ import (
 	"go.uber.org/zap"
 )
 
-// exchange daily				key: {exchange}:{date}												value:1 / 0 (is trading day)
-// exchange daily companies		key: {exchange}:{date}:{companyCode}								value:{companyName}
-// company daily rollup quote	key: {exchange}:{companyCode}:{date} 								value:{open},{close},{high},{low},{volume}
-// company daily quote serial	key: {exchange}:{companyCode}:{date}:{Pre|Regular|Post}:{timestamp}	value:{open},{close},{high},{low},{volume}
-// company daily dividend		key: {exchange}:{companyCode}:dividend:{date}						value:{timestamp},{amount}
-// company daily split			key: {exchange}:{companyCode}:split:{date}							value:{timestamp},{numerator},{denominator}
+// exchange daily				key: et:{exchange}:{date}												value:1 / 0 (is trading day)
+// exchange daily companies		key: ec:{exchange}:{date}:{companyCode}									value:{companyName}
+// company daily rollup quote	key: 1d:{exchange}:{companyCode}:{date} 								value:{open},{close},{high},{low},{volume}
+// company daily quote serial	key: 1m:{exchange}:{companyCode}:{date}:{Pre|Regular|Post}:{timestamp}	value:{open},{close},{high},{low},{volume}
+// company daily dividend		key: dividend:{exchange}:{companyCode}:{date}							value:{timestamp},{amount}
+// company daily split			key: split:{exchange}:{companyCode}:{date}								value:{timestamp},{numerator},{denominator}
 
 // Redis define redis store
 type Redis struct {
@@ -50,7 +50,8 @@ func (s Redis) Close() error {
 
 // Exists check quote exists
 func (s Redis) Exists(exchange exchanges.Exchange, date time.Time) (bool, error) {
-	key := fmt.Sprintf("%s:%s", exchange.Code(), date.Format(constants.DatePattern))
+	// key: et:{exchange}:{date} value:1 / 0 (is trading day)
+	key := fmt.Sprintf("et:%s:%s", exchange.Code(), date.Format(constants.DatePattern))
 	exists, err := s.client.Exists(key).Result()
 	if err != nil {
 		if err == redis.Nil {
@@ -73,8 +74,8 @@ func (s Redis) Save(exchange exchanges.Exchange, date time.Time, edq *quotes.Exc
 		isTrading = "0"
 	}
 
-	// key: {exchange}:{date} value:1 / 0 (is trading day)
-	pairs = append(pairs, fmt.Sprintf("%s:%s", exchange.Code(), date.Format(constants.DatePattern)), isTrading)
+	// key: et:{exchange}:{date} value:1 / 0 (is trading day)
+	pairs = append(pairs, fmt.Sprintf("et:%s:%s", exchange.Code(), date.Format(constants.DatePattern)), isTrading)
 
 	// save exchange daily companies
 	pairs = append(pairs, s.saveExchangeDailyCompanies(exchange, date, edq.Companies)...)
@@ -82,9 +83,9 @@ func (s Redis) Save(exchange exchanges.Exchange, date time.Time, edq *quotes.Exc
 	// save exchange daily company quotes
 	for _, cdq := range edq.Quotes {
 		// save company rollup
-		// key: {exchange}:{companyCode}:{date} value:{open},{close},{high},{low},{volume}
+		// key: 1d:{exchange}:{companyCode}:{date} value:{open},{close},{high},{low},{volume}
 		rollup := cdq.Regular.Rollup()
-		key := fmt.Sprintf("%s:%s:%s", exchange.Code(), cdq.Company.Code, date.Format(constants.DatePattern))
+		key := fmt.Sprintf("1d:%s:%s:%s", exchange.Code(), cdq.Company.Code, date.Format(constants.DatePattern))
 		pairs = append(pairs, key, s.formatQuote(*rollup))
 
 		// save dividend
@@ -98,15 +99,12 @@ func (s Redis) Save(exchange exchanges.Exchange, date time.Time, edq *quotes.Exc
 		}
 
 		// save pre
-		// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
 		pairs = append(pairs, s.saveCompanyDailyQuoteSerial(exchange, cdq.Company, date, quotes.SerialTypePre, cdq.Pre)...)
 
 		// save regular
-		// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
 		pairs = append(pairs, s.saveCompanyDailyQuoteSerial(exchange, cdq.Company, date, quotes.SerialTypeRegular, cdq.Regular)...)
 
 		// save post
-		// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
 		pairs = append(pairs, s.saveCompanyDailyQuoteSerial(exchange, cdq.Company, date, quotes.SerialTypePost, cdq.Post)...)
 	}
 
@@ -134,11 +132,11 @@ func (s Redis) saveExchangeDailyCompanies(exchange exchanges.Exchange, date time
 		return []string{}
 	}
 
-	// key: {exchange}:{date}:{companyCode} value:{companyName}
+	// key: ec:{exchange}:{date}:{companyCode} value:{companyName}
 	pairs := make([]string, len(companies)*2)
 	index := 0
 	for _, company := range companies {
-		pairs[index*2] = fmt.Sprintf("%s:%s:%s", exchange.Code(), date.Format(constants.DatePattern), company.Code)
+		pairs[index*2] = fmt.Sprintf("ec:%s:%s:%s", exchange.Code(), date.Format(constants.DatePattern), company.Code)
 		pairs[index*2+1] = company.Name
 		index++
 	}
@@ -147,15 +145,15 @@ func (s Redis) saveExchangeDailyCompanies(exchange exchanges.Exchange, date time
 }
 
 func (s Redis) saveCompanyDividend(exchange exchanges.Exchange, company *quotes.Company, date time.Time, dividend *quotes.Dividend) []string {
-	// key: {exchange}:{companyCode}:dividend:{date} value:{timestamp},{amount}
-	key := fmt.Sprintf("%s:%s:dividend:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern))
+	// key: dividend:{exchange}:{companyCode}:{date} value:{timestamp},{amount}
+	key := fmt.Sprintf("dividend:%s:%s:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern))
 	value := fmt.Sprintf("%d,%f", dividend.Timestamp, dividend.Amount)
 	return []string{key, value}
 }
 
 func (s Redis) saveCompanySplit(exchange exchanges.Exchange, company *quotes.Company, date time.Time, split *quotes.Split) []string {
-	// key: {exchange}:{companyCode}:split:{date} value:{timestamp},{numerator},{denominator}
-	key := fmt.Sprintf("%s:%s:split:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern))
+	// key: split:{exchange}:{companyCode}:{date} value:{timestamp},{numerator},{denominator}
+	key := fmt.Sprintf("split:%s:%s:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern))
 	value := fmt.Sprintf("%d,%f,%f", split.Timestamp, split.Numerator, split.Denominator)
 	return []string{key, value}
 }
@@ -165,13 +163,14 @@ func (s Redis) saveCompanyDailyQuoteSerial(exchange exchanges.Exchange, company 
 		return []string{}
 	}
 
+	dateText := date.Format(constants.DatePattern)
 	pairs := make([]string, len(*serial)*2)
 	for index, quote := range *serial {
-		// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
-		pairs[index*2] = fmt.Sprintf("%s:%s:%s:%s:%d",
+		// key: 1m:{exchange}:{companyCode}:{date}:{Pre|Regular|Post}:{timestamp} value:{open},{close},{high},{low},{volume}
+		pairs[index*2] = fmt.Sprintf("1m:%s:%s:%s:%s:%d",
 			exchange.Code(),
 			company.Code,
-			date.Format(constants.DatePattern),
+			dateText,
 			serialType.String(),
 			quote.Timestamp)
 		pairs[index*2+1] = s.formatQuote(quote)
@@ -187,15 +186,18 @@ func (s Redis) formatQuote(quote quotes.Quote) string {
 // Load load exchange daily quote
 func (s Redis) Load(exchange exchanges.Exchange, date time.Time) (*quotes.ExchangeDailyQuote, error) {
 	// load exchange daily
-	// key: {exchange}:{date} value:1 / 0 (is trading day)
-	key := fmt.Sprintf("%s:%s", exchange.Code(), date.Format(constants.DatePattern))
+	// key: et:{exchange}:{date} value:1 / 0 (is trading day)
+	key := fmt.Sprintf("et:%s:%s", exchange.Code(), date.Format(constants.DatePattern))
 	isTradingDay, err := s.client.Get(key).Result()
 	if err != nil {
-		zap.L().Error("load exchange daily failed",
-			zap.Error(err),
-			zap.String("exchange", exchange.Code()),
-			zap.Time("date", date))
-		return nil, err
+		if err != redis.Nil {
+			zap.L().Error("load exchange daily failed",
+				zap.Error(err),
+				zap.String("exchange", exchange.Code()),
+				zap.Time("date", date))
+			return nil, err
+		}
+		isTradingDay = "0"
 	}
 
 	// is trading day
@@ -239,8 +241,8 @@ func (s Redis) Load(exchange exchanges.Exchange, date time.Time) (*quotes.Exchan
 }
 
 func (s Redis) loadExchangeDailyCompanies(exchange exchanges.Exchange, date time.Time) (map[string]*quotes.Company, error) {
-	// key: {exchange}:{date}:{companyCode} value:{companyName}
-	prefix := fmt.Sprintf("%s:%s:", exchange.Code(), date.Format(constants.DatePattern))
+	// key: ec:{exchange}:{date}:{companyCode} value:{companyName}
+	prefix := fmt.Sprintf("ec:%s:%s:", exchange.Code(), date.Format(constants.DatePattern))
 	kvs, err := s.prefixScan(prefix)
 	if err != nil {
 		zap.L().Error("get exchange daily company failed",
@@ -263,8 +265,8 @@ func (s Redis) loadCompanyQuotes(exchange exchanges.Exchange, date time.Time, co
 	cdqs := make(map[string]*quotes.CompanyDailyQuote, len(companies))
 	for companyCode, company := range companies {
 		// load company rollup
-		// key: {exchange}:{companyCode}:{date} value:{open},{close},{high},{low},{volume}
-		key := fmt.Sprintf("%s:%s:%s", exchange.Code(), companyCode, date.Format(constants.DatePattern))
+		// key: 1d:{exchange}:{companyCode}:{date} value:{open},{close},{high},{low},{volume}
+		key := fmt.Sprintf("1d:%s:%s:%s", exchange.Code(), companyCode, date.Format(constants.DatePattern))
 		_, err := s.client.Get(key).Result()
 		if err != nil {
 			if err == redis.Nil {
@@ -324,9 +326,9 @@ func (s Redis) loadCompanyQuotes(exchange exchanges.Exchange, date time.Time, co
 }
 
 func (s Redis) loadCompanyDividend(exchange exchanges.Exchange, date time.Time, company *quotes.Company) (*quotes.Dividend, error) {
-	// key: {exchange}:{companyCode}:dividend:{date} value:{timestamp},{amount}
+	// key: dividend:{exchange}:{companyCode}:{date} value:{timestamp},{amount}
 	dividend := &quotes.Dividend{Enable: false, Timestamp: 0, Amount: 0}
-	key := fmt.Sprintf("%s:%s:dividend:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern))
+	key := fmt.Sprintf("dividend:%s:%s:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern))
 	value, err := s.client.Get(key).Result()
 	if err != nil {
 		if err == redis.Nil {
@@ -359,9 +361,9 @@ func (s Redis) loadCompanyDividend(exchange exchanges.Exchange, date time.Time, 
 }
 
 func (s Redis) loadCompanySplit(exchange exchanges.Exchange, date time.Time, company *quotes.Company) (*quotes.Split, error) {
-	// key: {exchange}:{companyCode}:split:{date} value:{timestamp},{numerator},{denominator}
+	// key: split:{exchange}:{companyCode}:{date} value:{timestamp},{numerator},{denominator}
 	split := &quotes.Split{Enable: false, Timestamp: 0, Numerator: 0, Denominator: 0}
-	key := fmt.Sprintf("%s:%s:split:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern))
+	key := fmt.Sprintf("split:%s:%s:%s", exchange.Code(), company.Code, date.Format(constants.DatePattern))
 	value, err := s.client.Get(key).Result()
 	if err != nil {
 		if err == redis.Nil {
@@ -394,8 +396,8 @@ func (s Redis) loadCompanySplit(exchange exchanges.Exchange, date time.Time, com
 }
 
 func (s Redis) loadCompanyQuoteSerial(exchange exchanges.Exchange, date time.Time, company *quotes.Company, serialType quotes.SerialType) (*quotes.Serial, error) {
-	// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
-	prefix := fmt.Sprintf("%s:%s:%s:%s:", exchange.Code(), company.Code, date.Format(constants.DatePattern), serialType.String())
+	// key: 1m:{exchange}:{companyCode}:{date}:{Pre|Regular|Post}:{timestamp} value:{open},{close},{high},{low},{volume}
+	prefix := fmt.Sprintf("1m:%s:%s:%s:%s:", exchange.Code(), company.Code, date.Format(constants.DatePattern), serialType.String())
 	kvs, err := s.prefixScan(prefix)
 	if err != nil {
 		zap.L().Error("get company quote serial failed",
@@ -410,7 +412,7 @@ func (s Redis) loadCompanyQuoteSerial(exchange exchanges.Exchange, date time.Tim
 	serial := new(quotes.Serial)
 	*serial = make([]quotes.Quote, 0, len(kvs))
 	for _, kv := range kvs {
-		quote, err := s.scanQuote(kv.Value, kv.Value)
+		quote, err := s.scanQuote(kv.Key, kv.Value)
 		if err != nil {
 			zap.L().Error("parse company quote serial failed",
 				zap.Error(err),
@@ -430,19 +432,19 @@ func (s Redis) loadCompanyQuoteSerial(exchange exchanges.Exchange, date time.Tim
 }
 
 func (s Redis) scanQuote(key, value string) (*quotes.Quote, error) {
-	// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
-	parts := strings.Split(string(key), ":")
-	if len(parts) != 5 {
+	// key: 1m:{exchange}:{companyCode}:{date}:{Pre|Regular|Post}:{timestamp} value:{open},{close},{high},{low},{volume}
+	parts := strings.Split(key, ":")
+	if len(parts) != 6 {
 		return nil, fmt.Errorf("invalid company quote serial key: %s", key)
 	}
 
-	timestamp, err := strconv.ParseUint(parts[4], 10, 64)
+	timestamp, err := strconv.ParseUint(parts[5], 10, 64)
 	if err != nil {
 		return nil, err
 	}
 
 	quote := &quotes.Quote{Timestamp: timestamp}
-	_, err = fmt.Sscanf(string(value), "%f,%f,%f,%f,%d", &quote.Open, &quote.Close, &quote.High, &quote.Low, &quote.Volume)
+	_, err = fmt.Sscanf(value, "%f,%f,%f,%f,%d", &quote.Open, &quote.Close, &quote.High, &quote.Low, &quote.Volume)
 	if err != nil {
 		return nil, err
 	}
