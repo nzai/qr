@@ -255,7 +255,8 @@ func (s Redis) loadExchangeDailyCompanies(exchange exchanges.Exchange, date time
 
 	companies := make(map[string]*quotes.Company, len(kvs))
 	for _, kv := range kvs {
-		companies[kv.Key] = &quotes.Company{Code: kv.Key, Name: kv.Value}
+		code := strings.Replace(kv.Key, prefix, "", -1)
+		companies[code] = &quotes.Company{Code: code, Name: kv.Value}
 	}
 
 	return companies, nil
