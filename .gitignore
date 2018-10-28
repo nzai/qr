@@ -12,3 +12,4 @@
 *.out
 qr
 *.zip
+cmd/qsync/qsync

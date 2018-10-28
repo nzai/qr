@@ -27,7 +27,7 @@ func NewScheduler(store stores.Store, exchanges ...exchanges.Exchange) *Schedule
 	}
 }
 
-// Run start jobs
+// Run jobs
 func (s Scheduler) Run(start time.Time) *sync.WaitGroup {
 	wg := new(sync.WaitGroup)
 
@@ -104,15 +104,15 @@ func (s Scheduler) dailyJob(wg *sync.WaitGroup, exchange exchanges.Exchange) {
 			// crawl
 			err = s.crawl(exchange, yesterday)
 			if err != nil && index < constants.RetryCount-1 {
-				zap.L().Info("crawl exchange daily quote failed",
+				zap.L().Warn("crawl exchange daily quote failed",
 					zap.Error(err),
 					zap.Duration("retry in", constants.RetryInterval),
 					zap.String("retries", fmt.Sprintf("%d/%d", index+1, constants.RetryCount)))
 				time.Sleep(constants.RetryInterval)
-				continue;
+				continue
 			}
 
-			break;
+			break
 		}
 
 		afterCrawl := time.Now().In(exchange.Location())
