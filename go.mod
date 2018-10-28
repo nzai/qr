@@ -7,11 +7,14 @@ require (
 	github.com/go-redis/redis v6.14.1+incompatible
 	github.com/golang/protobuf v1.2.0 // indirect
 	github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db // indirect
+	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20180825215210-0210a2f0f73c // indirect
 	github.com/guotie/gogb2312 v0.0.0-20160513031741-a052a05f3e7e
 	github.com/hpcloud/tail v1.0.0 // indirect
 	github.com/jtolds/gls v4.2.1+incompatible // indirect
 	github.com/kr/pretty v0.1.0 // indirect
+	github.com/mozillazg/go-cos v0.9.0
+	github.com/mozillazg/go-httpheader v0.2.0 // indirect
 	github.com/nzai/bio v0.1.2
 	github.com/nzai/netop v0.1.1
 	github.com/onsi/ginkgo v1.6.0 // indirect

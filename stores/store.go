@@ -2,9 +2,12 @@ package stores
 
 import (
 	"fmt"
+	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
+	"github.com/mozillazg/go-cos"
 	"github.com/nzai/qr/exchanges"
 	"github.com/nzai/qr/quotes"
 	"go.uber.org/zap"
@@ -41,6 +44,25 @@ func Parse(arg string) (Store, error) {
 			return nil, fmt.Errorf("store arg invalid: %s", arg)
 		}
 		return NewRedis(parts[1], parts[2]), nil
+	case "cos":
+		if len(parts) < 4 {
+			zap.L().Error("store arg invalid", zap.String("arg", arg))
+			return nil, fmt.Errorf("store arg invalid: %s", arg)
+		}
+
+		bucketURL, err := url.Parse(parts[1])
+		if err != nil {
+			return nil, fmt.Errorf("bucket url arg invalid: %s", arg)
+		}
+
+		client := cos.NewClient(&cos.BaseURL{BucketURL: bucketURL}, &http.Client{
+			Transport: &cos.AuthorizationTransport{
+				SecretID:  parts[2],
+				SecretKey: parts[3],
+			},
+		})
+
+		return NewCos(client), nil
 	default:
 		zap.L().Error("store type invalid", zap.String("type", parts[0]))
 		return nil, fmt.Errorf("store type invalid: %s", parts[0])
