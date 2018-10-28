@@ -84,6 +84,7 @@ func (s Sync) syncExchange(exchange exchanges.Exchange) error {
 			zap.L().Info(fmt.Sprintf("(%.2f%%) synced", float64(processed)*100/float64(total)),
 				zap.String("exchange", exchange.Code()),
 				zap.Time("date", date),
+				zap.String("d", date.Weekday().String()),
 				zap.String("process", fmt.Sprintf("%d/%d", processed, total)),
 				zap.Float64("qps", qps),
 				zap.Duration("remain", remain),
@@ -160,6 +161,25 @@ func (s Sync) syncExchangeDateOnce(exchange exchanges.Exchange, date time.Time) 
 	err = s.dest.Save(exchange, date, edq)
 	if err != nil {
 		zap.L().Error("save exchange daily quote failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Time("date", date))
+		return false, err
+	}
+
+	// validate
+	saved, err := s.dest.Load(exchange, date)
+	if err != nil {
+		zap.L().Error("load saved exchange daily quote failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Time("date", date))
+		return false, err
+	}
+
+	err = saved.Equal(*edq)
+	if err != nil {
+		zap.L().Error("saved exchange daily quote is different",
 			zap.Error(err),
 			zap.String("exchange", exchange.Code()),
 			zap.Time("date", date))
