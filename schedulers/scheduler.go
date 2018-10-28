@@ -1,6 +1,7 @@
 package schedulers
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -90,6 +91,7 @@ func (s Scheduler) dailyJob(wg *sync.WaitGroup, exchange exchanges.Exchange) {
 		zap.String("exchange", exchange.Code()),
 		zap.Duration("in", duration2Tomorrow))
 
+	var err error
 	for {
 		// wait for tomorrow zero clock
 		beforeCrawl := <-time.After(duration2Tomorrow)
@@ -98,8 +100,20 @@ func (s Scheduler) dailyJob(wg *sync.WaitGroup, exchange exchanges.Exchange) {
 			zap.String("exchange", exchange.Code()),
 			zap.Time("date", yesterday))
 
-		// crawl
-		err := s.crawl(exchange, yesterday)
+		for index := 0; index < constants.RetryCount; index++ {
+			// crawl
+			err = s.crawl(exchange, yesterday)
+			if err != nil && index < constants.RetryCount-1 {
+				zap.L().Info("crawl exchange daily quote failed",
+					zap.Error(err),
+					zap.Duration("retry in", constants.RetryInterval),
+					zap.String("retries", fmt.Sprintf("%d/%d", index+1, constants.RetryCount)))
+				time.Sleep(constants.RetryInterval)
+				continue;
+			}
+
+			break;
+		}
 
 		afterCrawl := time.Now().In(exchange.Location())
 		duration2Tomorrow = utils.TomorrowZero(afterCrawl).Sub(afterCrawl)
