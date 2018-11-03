@@ -29,24 +29,25 @@ func (s Sync) Run() *sync.WaitGroup {
 	wg := new(sync.WaitGroup)
 	wg.Add(len(s.exchanges))
 
-	for _, exchange := range s.exchanges {
-		go func(_exchange exchanges.Exchange, _wg *sync.WaitGroup) {
-			defer _wg.Done()
+	go func(_wg *sync.WaitGroup) {
+		for _, exchange := range s.exchanges {
 			zap.L().Info("sync exchange daily quote start",
-				zap.String("exchange", _exchange.Code()))
+				zap.String("exchange", exchange.Code()))
 
-			err := s.syncExchange(_exchange)
+			err := s.syncExchange(exchange)
 			if err != nil {
 				zap.L().Error("sync exchange daily quote failed",
 					zap.Error(err),
-					zap.String("exchange", _exchange.Code()))
-				return
+					zap.String("exchange", exchange.Code()))
+				
+			} else {
+				zap.L().Info("sync exchange daily quote finished",
+				zap.String("exchange", exchange.Code()))
 			}
 
-			zap.L().Info("sync exchange daily quote finished",
-				zap.String("exchange", _exchange.Code()))
-		}(exchange, wg)
-	}
+			_wg.Done()
+		}
+	}(wg)
 
 	return wg
 }
