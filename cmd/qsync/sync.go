@@ -56,7 +56,7 @@ func (s Sync) syncExchange(exchange exchanges.Exchange) error {
 	startTime := time.Now()
 
 	date := time.Date(2015, 5, 1, 0, 0, 0, 0, exchange.Location())
-	endDate := utils.YesterdayZero(startTime.In(exchange.Location()))
+	endDate := utils.TodayZero(startTime.In(exchange.Location()))
 
 	total := int(endDate.Sub(date).Hours() / 24)
 	processed := 0
