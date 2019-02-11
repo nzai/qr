@@ -1,11 +1,10 @@
 package exchanges
 
 import (
-	"errors"
-	"regexp"
+	"bytes"
 	"time"
 
-	"github.com/guotie/gogb2312"
+	"github.com/360EntSecGroup-Skylar/excelize"
 	"github.com/nzai/netop"
 	"github.com/nzai/qr/constants"
 	"github.com/nzai/qr/quotes"
@@ -42,48 +41,67 @@ func (s Szse) Location() *time.Location {
 
 // Companies get exchange companies
 func (s Szse) Companies() (map[string]*quotes.Company, error) {
-	url := "http://www.szse.cn/szseWeb/ShowReport.szse?SHOWTYPE=EXCEL&CATALOGID=1110&tab1PAGENUM=1&ENCODE=1&TABKEY=tab1"
-
-	// download html from sse
-	html, err := netop.GetString(url, netop.Retry(constants.RetryCount, constants.RetryInterval))
-	if err != nil {
-		zap.L().Error("download szse companies failed", zap.Error(err), zap.String("url", url))
-		return nil, err
+	urls := map[string][]int{
+		"http://www.szse.cn/api/report/ShowReport?SHOWTYPE=xlsx&CATALOGID=1110&TABKEY=tab1&random=0.49987789273726513": []int{5},
+		"http://www.szse.cn/api/report/ShowReport?SHOWTYPE=xlsx&CATALOGID=1110&TABKEY=tab2&random=0.42963499040546527": []int{10},
+		"http://www.szse.cn/api/report/ShowReport?SHOWTYPE=xlsx&CATALOGID=1110&TABKEY=tab3&random=0.9988466864844461":  []int{5, 10},
 	}
 
-	// encode html from gb2312 to utf-8
-	html, err, _, _ = gogb2312.ConvertGB2312String(html)
-	if err != nil {
-		return nil, err
-	}
+	companies := make(map[string]*quotes.Company)
+	for url, columns := range urls {
+		_companies, err := s.getByURL(url, columns)
+		if err != nil {
+			return nil, err
+		}
 
-	companies, err := s.parse(html)
-	if err != nil {
-		zap.L().Error("parse failed", zap.Error(err), zap.String("html", html))
-		return nil, err
+		var found bool
+		for code, company := range _companies {
+			_, found = companies[code]
+			if found {
+				continue
+			}
+
+			companies[code] = company
+		}
 	}
 
 	return companies, nil
 }
 
-// parse parse result html
-func (s Szse) parse(html string) (map[string]*quotes.Company, error) {
-	// match by regex
-	regex := regexp.MustCompile(`\' ><td  align='center'  >(\d{6})</td><td  align='center'  >([^<]*?)</td>`)
-	group := regex.FindAllStringSubmatch(html, -1)
-
-	companies := make(map[string]*quotes.Company)
-	for _, section := range group {
-		// remove duplicated
-		if _, found := dict[section[1]]; found {
-			continue
-		}
-
-		companies[section[1]] = &quotes.Company{Code: section[1], Name: section[2]}
+func (s Szse) getByURL(url string, columns []int) (map[string]*quotes.Company, error) {
+	// download html from sse
+	html, err := netop.GetBytes(url, netop.Retry(constants.RetryCount, constants.RetryInterval))
+	if err != nil {
+		zap.L().Error("download szse companies failed", zap.Error(err), zap.String("url", url))
+		return nil, err
 	}
 
-	if len(companies) == 0 {
-		return nil, errors.New("szse companies not found")
+	xlsx, err := excelize.OpenReader(bytes.NewBuffer(html))
+	if err != nil {
+		zap.L().Error("download szse companies failed", zap.Error(err), zap.String("url", url))
+		return nil, err
+	}
+
+	sheetName := xlsx.GetSheetName(1)
+	rows := xlsx.GetRows(sheetName)
+
+	companies := make(map[string]*quotes.Company)
+	for _, row := range rows {
+		for _, column := range columns {
+			if column+1 >= len(row) {
+				continue
+			}
+
+			_, found := companies[row[column]]
+			if found {
+				continue
+			}
+
+			companies[row[column]] = &quotes.Company{
+				Code: row[column],
+				Name: row[column+1],
+			}
+		}
 	}
 
 	return companies, nil
