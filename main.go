@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	startDate        = time.Now().AddDate(0, 0, -15) // yahoo finance limit
+	lastDate         = flag.Int("d", 15, "last days, default is 15")
 	storeArgument    = flag.String("s", "fs|/data", "store type: eg fs")
 	exchangeArgument = flag.String("e", "Nyse", "exchange: eg Nyse,Nasdaq")
 )
@@ -24,6 +24,7 @@ func main() {
 	defer undo()
 
 	flag.Parse()
+	startDate := time.Now().AddDate(0, 0, -*lastDate) // yahoo finance limit
 
 	store, err := stores.Parse(*storeArgument)
 	if err != nil {
