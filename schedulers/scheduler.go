@@ -71,6 +71,12 @@ func (s Scheduler) historyJob(wg *sync.WaitGroup, exchange exchanges.Exchange, s
 
 	err := s.crawl(exchange, dates...)
 	if err != nil {
+		err = utils.GetWeChatService().SendMessage(fmt.Sprintf("history job failed due to %s", err))
+		if err != nil {
+			zap.L().Fatal("send history job failed message failed", zap.Error(err))
+		}
+		zap.L().Debug("send history job failed message success")
+
 		zap.L().Fatal("exchange history job failed",
 			zap.Error(err),
 			zap.String("exchange", exchange.Code()),
@@ -123,6 +129,12 @@ func (s Scheduler) dailyJob(wg *sync.WaitGroup, exchange exchanges.Exchange) {
 				zap.String("exchange", exchange.Code()),
 				zap.Time("date", yesterday),
 				zap.Duration("to tomorrow", duration2Tomorrow))
+
+			err = utils.GetWeChatService().SendMessage(fmt.Sprintf("daily job failed due to %s", err))
+			if err != nil {
+				zap.L().Fatal("send daily job failed message failed", zap.Error(err))
+			}
+			zap.L().Debug("send daily job failed message success")
 		} else {
 			zap.L().Info("exchange daily job success",
 				zap.String("exchange", exchange.Code()),

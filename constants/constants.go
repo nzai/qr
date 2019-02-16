@@ -13,4 +13,6 @@ const (
 	DatePattern = "20060102"
 	// AwsSqsMaxBatchSize define max sqs batch size
 	AwsSqsMaxBatchSize = 10
+	// DefaultLastDays crawl last 20 days
+	DefaultLastDays = 20
 )

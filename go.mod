@@ -3,6 +3,7 @@ module github.com/nzai/qr
 require (
 	bitbucket.org/mozillazg/go-httpheader v0.2.0 // indirect
 	github.com/360EntSecGroup-Skylar/excelize v1.4.1
+	github.com/BurntSushi/toml v0.3.1
 	github.com/aws/aws-lambda-go v1.8.2
 	github.com/aws/aws-sdk-go v1.15.35
 	github.com/fsnotify/fsnotify v1.4.7 // indirect
@@ -28,6 +29,10 @@ require (
 	go.uber.org/atomic v1.3.2 // indirect
 	go.uber.org/multierr v1.1.0 // indirect
 	go.uber.org/zap v1.9.1
+	golang.org/x/net v0.0.0-20190213061140-3a22650c66bd // indirect
+	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4 // indirect
+	golang.org/x/sys v0.0.0-20190215142949-d0b11bdaac8a // indirect
+	golang.org/x/text v0.3.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/fsnotify.v1 v1.4.7 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect

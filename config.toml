@@ -1,0 +1,7 @@
+exchanges = "Amex,Nyse,Nasdaq,Sse,Szse,Hkex"
+stores = "fs|/data"
+
+[wechat]
+corp_id = "you corp id"
+app_id = 1000000
+app_secret = "you app secret"
