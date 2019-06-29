@@ -32,13 +32,9 @@ type YahooQuote struct {
 					Regular YahooPeroid `json:"regular"`
 					Post    YahooPeroid `json:"post"`
 				} `json:"currentTradingPeriod"`
-				TradingPeriods struct {
-					Pres     [][]YahooPeroid `json:"pre"`
-					Regulars [][]YahooPeroid `json:"regular"`
-					Posts    [][]YahooPeroid `json:"post"`
-				} `json:"tradingPeriods"`
-				DataGranularity string   `json:"dataGranularity"`
-				ValidRanges     []string `json:"validRanges"`
+				TradingPeriods  [][]YahooPeroid `json:"tradingPeriods"`
+				DataGranularity string          `json:"dataGranularity"`
+				ValidRanges     []string        `json:"validRanges"`
 			} `json:"meta"`
 			Timestamp []uint64 `json:"timestamp"`
 			Events    struct {
@@ -140,7 +136,7 @@ func (q YahooQuote) ToCompanyDailyQuote(company *Company, start, end uint64) *Co
 		break
 	}
 
-	tp := q.Chart.Result[0].Meta.TradingPeriods
+	tp := q.Chart.Result[0].Meta.CurrentTradingPeriod
 	qs := q.Chart.Result[0].Indicators.Quotes[0]
 	for index, ts := range q.Chart.Result[0].Timestamp {
 		// ignore all zero quote
@@ -158,14 +154,12 @@ func (q YahooQuote) ToCompanyDailyQuote(company *Company, start, end uint64) *Co
 		}
 
 		//	Pre, Regular, Post
-		if ts >= tp.Pres[0][0].Start && ts < tp.Pres[0][0].End {
+		if ts >= tp.Pre.Start && ts < tp.Pre.End {
 			*cdq.Pre = append(*cdq.Pre, quote)
-		} else if ts >= tp.Regulars[0][0].Start && ts < tp.Regulars[0][0].End {
+		} else if ts >= tp.Regular.Start && ts < tp.Regular.End {
 			*cdq.Regular = append(*cdq.Regular, quote)
-		} else if ts >= tp.Posts[0][0].Start && ts < tp.Posts[0][0].End {
+		} else if ts >= tp.Post.Start && ts < tp.Post.End {
 			*cdq.Post = append(*cdq.Post, quote)
-		} else {
-			continue
 		}
 	}
 
