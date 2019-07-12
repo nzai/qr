@@ -32,9 +32,13 @@ type YahooQuote struct {
 					Regular YahooPeroid `json:"regular"`
 					Post    YahooPeroid `json:"post"`
 				} `json:"currentTradingPeriod"`
-				TradingPeriods  [][]YahooPeroid `json:"tradingPeriods"`
-				DataGranularity string          `json:"dataGranularity"`
-				ValidRanges     []string        `json:"validRanges"`
+				TradingPeriods struct {
+					Pre     [][]YahooPeroid `json:"pre"`
+					Regular [][]YahooPeroid `json:"regular"`
+					Post    [][]YahooPeroid `json:"post"`
+				} `json:"tradingPeriods"`
+				DataGranularity string   `json:"dataGranularity"`
+				ValidRanges     []string `json:"validRanges"`
 			} `json:"meta"`
 			Timestamp []uint64 `json:"timestamp"`
 			Events    struct {
