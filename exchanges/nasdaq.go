@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nzai/netop"
 	"github.com/nzai/qr/constants"
 	"github.com/nzai/qr/quotes"
 	"github.com/nzai/qr/sources"
+	"github.com/nzai/qr/utils"
 	"go.uber.org/zap"
 )
 
@@ -40,7 +40,7 @@ func (s Nasdaq) Companies() (map[string]*quotes.Company, error) {
 	url := "http://www.nasdaq.com/screening/companies-by-industry.aspx?exchange=NASDAQ&render=download"
 
 	// download csv from nasdaq
-	csv, err := netop.GetString(url, netop.Retry(constants.RetryCount, constants.RetryInterval))
+	csv, err := utils.TryDownloadString(url, constants.RetryCount, constants.RetryInterval)
 	if err != nil {
 		zap.L().Error("download nasdaq companies failed", zap.Error(err), zap.String("url", url))
 		return nil, err

@@ -6,10 +6,10 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/nzai/netop"
 	"github.com/nzai/qr/constants"
 	"github.com/nzai/qr/quotes"
 	"github.com/nzai/qr/sources"
+	"github.com/nzai/qr/utils"
 	"go.uber.org/zap"
 )
 
@@ -70,7 +70,7 @@ func (s Hkex) Companies() (map[string]*quotes.Company, error) {
 
 // queryCompanies query companies of special category
 func (s Hkex) queryCompanies(page, api string) ([]*quotes.Company, error) {
-	body, err := netop.GetString(page, netop.Retry(constants.RetryCount, constants.RetryInterval))
+	body, err := utils.TryDownloadString(page, constants.RetryCount, constants.RetryInterval)
 	if err != nil {
 		zap.L().Error("download hkex page failed", zap.Error(err), zap.String("url", page))
 		return nil, err
@@ -84,7 +84,7 @@ func (s Hkex) queryCompanies(page, api string) ([]*quotes.Company, error) {
 	}
 
 	url := fmt.Sprintf(api, matches[1], time.Now().UnixNano())
-	body, err = netop.GetString(url, netop.Retry(constants.RetryCount, constants.RetryInterval))
+	body, err = utils.TryDownloadString(url, constants.RetryCount, constants.RetryInterval)
 	if err != nil {
 		zap.L().Error("download hkex companies failed", zap.Error(err), zap.String("url", url), zap.String("token", matches[1]))
 		return nil, err

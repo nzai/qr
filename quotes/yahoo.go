@@ -1,8 +1,10 @@
 package quotes
 
 import (
+	"encoding/json"
 	"errors"
 
+	"github.com/nzai/qr/utils"
 	"go.uber.org/zap"
 )
 
@@ -11,6 +13,8 @@ var (
 	YahooNotFoundCode = "Not Found"
 	// ErrYahooSymbolNotFound define errors raised by yahoo finace on symblo not found
 	ErrYahooSymbolNotFound = errors.New("symbol not foud")
+	// ErrYahooInvalidTradingPeroid define errors raised by yahoo invalid trading peroid
+	ErrYahooInvalidTradingPeroid = errors.New("invalid trading peroid")
 )
 
 // YahooQuote define yahoo finace response structure
@@ -32,13 +36,9 @@ type YahooQuote struct {
 					Regular YahooPeroid `json:"regular"`
 					Post    YahooPeroid `json:"post"`
 				} `json:"currentTradingPeriod"`
-				TradingPeriods struct {
-					Pre     [][]YahooPeroid `json:"pre"`
-					Regular [][]YahooPeroid `json:"regular"`
-					Post    [][]YahooPeroid `json:"post"`
-				} `json:"tradingPeriods"`
-				DataGranularity string   `json:"dataGranularity"`
-				ValidRanges     []string `json:"validRanges"`
+				TradingPeriods  json.RawMessage `json:"tradingPeriods"`
+				DataGranularity string          `json:"dataGranularity"`
+				ValidRanges     []string        `json:"validRanges"`
 			} `json:"meta"`
 			Timestamp []uint64 `json:"timestamp"`
 			Events    struct {
@@ -79,6 +79,10 @@ func (q YahooQuote) Validate() error {
 	if q.Chart.Result[0].Indicators.Quotes == nil || len(q.Chart.Result[0].Indicators.Quotes) == 0 {
 		return errors.New("quote.Chart.Result[0].Indicators.Quotes is null")
 	}
+
+	// if len(q.Chart.Result[0].Meta.TradingPeriods) == 0 || len(q.Chart.Result[0].Meta.TradingPeriods[0]) == 0 {
+	// 	return errors.New("quote.Chart.Result[0].Meta.TradingPeriods invalie")
+	// }
 
 	if len(q.Chart.Result[0].Events.Dividends) > 1 {
 		zap.L().Warn("dividends count > 1",
@@ -140,7 +144,32 @@ func (q YahooQuote) ToCompanyDailyQuote(company *Company, start, end uint64) *Co
 		break
 	}
 
-	tp := q.Chart.Result[0].Meta.CurrentTradingPeriod
+	regularPeroid := q.getRegularTradingPeroid()
+	if regularPeroid == nil {
+		total := 0
+		for _, ts := range q.Chart.Result[0].Timestamp {
+			if ts < start || ts >= end {
+				continue
+			}
+
+			total++
+			if total < 5 {
+				continue
+			}
+
+			zap.L().Error("invalid yahoo quote",
+				zap.Uint64("start", start),
+				zap.Uint64("end", end),
+				zap.Any("quote", q))
+
+			utils.GetWeChatService().SendMessage("get invalid trading peroid")
+			break
+		}
+
+		return cdq
+	}
+
+	// tp := q.Chart.Result[0].Meta.TradingPeriods[0][0]
 	qs := q.Chart.Result[0].Indicators.Quotes[0]
 	for index, ts := range q.Chart.Result[0].Timestamp {
 		// ignore all zero quote
@@ -158,16 +187,37 @@ func (q YahooQuote) ToCompanyDailyQuote(company *Company, start, end uint64) *Co
 		}
 
 		//	Pre, Regular, Post
-		if ts >= tp.Pre.Start && ts < tp.Pre.End {
+		if ts < regularPeroid.Start {
 			*cdq.Pre = append(*cdq.Pre, quote)
-		} else if ts >= tp.Regular.Start && ts < tp.Regular.End {
+		} else if ts >= regularPeroid.Start && ts < regularPeroid.End {
 			*cdq.Regular = append(*cdq.Regular, quote)
-		} else if ts >= tp.Post.Start && ts < tp.Post.End {
+		} else if ts >= regularPeroid.End {
 			*cdq.Post = append(*cdq.Post, quote)
 		}
 	}
 
 	return cdq
+}
+
+// getRegularTradingPeroid get regular trading peroid by uncertain structure
+func (q YahooQuote) getRegularTradingPeroid() *YahooPeroid {
+	tp1 := new(TradingPeroid1)
+	err := json.Unmarshal(q.Chart.Result[0].Meta.TradingPeriods, tp1)
+	if err == nil {
+		if len(*tp1) > 0 && len((*tp1)[0]) > 0 {
+			return &(*tp1)[0][0]
+		}
+	}
+
+	tp2 := new(TradingPeroid2)
+	err = json.Unmarshal(q.Chart.Result[0].Meta.TradingPeriods, tp2)
+	if err == nil {
+		if len(tp2.Regular) > 0 && len(tp2.Regular[0]) > 0 {
+			return &tp2.Regular[0][0]
+		}
+	}
+
+	return nil
 }
 
 // YahooPeroid define trading peroid
@@ -190,4 +240,14 @@ type YahooSplits struct {
 	Numerator   uint32 `json:"numerator"`
 	Denominator uint32 `json:"denominator"`
 	Ratio       string `json:"splitRatio"`
+}
+
+// TradingPeroid1 define trading peroid
+type TradingPeroid1 [][]YahooPeroid
+
+// TradingPeroid2 define trading peroid
+type TradingPeroid2 struct {
+	Pre     [][]YahooPeroid `json:"pre"`
+	Regular [][]YahooPeroid `json:"regular"`
+	Post    [][]YahooPeroid `json:"post"`
 }

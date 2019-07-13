@@ -5,10 +5,11 @@ import (
 	"time"
 
 	"github.com/360EntSecGroup-Skylar/excelize"
-	"github.com/nzai/netop"
+
 	"github.com/nzai/qr/constants"
 	"github.com/nzai/qr/quotes"
 	"github.com/nzai/qr/sources"
+	"github.com/nzai/qr/utils"
 	"go.uber.org/zap"
 )
 
@@ -70,7 +71,7 @@ func (s Szse) Companies() (map[string]*quotes.Company, error) {
 
 func (s Szse) getByURL(url string, columns []int) (map[string]*quotes.Company, error) {
 	// download html from sse
-	html, err := netop.GetBytes(url, netop.Retry(constants.RetryCount, constants.RetryInterval))
+	_, html, err := utils.TryDownloadBytes(url, constants.RetryCount, constants.RetryInterval)
 	if err != nil {
 		zap.L().Error("download szse companies failed", zap.Error(err), zap.String("url", url))
 		return nil, err

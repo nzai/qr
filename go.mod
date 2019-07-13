@@ -19,7 +19,6 @@ require (
 	github.com/mozillazg/go-cos v0.9.0
 	github.com/mozillazg/go-httpheader v0.2.0 // indirect
 	github.com/nzai/bio v0.1.2
-	github.com/nzai/netop v0.1.1
 	github.com/onsi/ginkgo v1.6.0 // indirect
 	github.com/onsi/gomega v1.4.1 // indirect
 	github.com/pkg/errors v0.8.0 // indirect
@@ -35,6 +34,7 @@ require (
 	golang.org/x/text v0.3.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/fsnotify.v1 v1.4.7 // indirect
+	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v2 v2.2.1 // indirect
 )

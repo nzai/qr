@@ -6,10 +6,11 @@ import (
 	"time"
 
 	"github.com/guotie/gogb2312"
-	"github.com/nzai/netop"
+
 	"github.com/nzai/qr/constants"
 	"github.com/nzai/qr/quotes"
 	"github.com/nzai/qr/sources"
+	"github.com/nzai/qr/utils"
 	"go.uber.org/zap"
 )
 
@@ -52,7 +53,7 @@ func (s Sse) Companies() (map[string]*quotes.Company, error) {
 	for _, url := range urls {
 
 		// download html from sse
-		text, err := netop.GetString(url, netop.Refer(referer), netop.Retry(constants.RetryCount, constants.RetryInterval))
+		text, err := utils.TryDownloadStringReferer(url, referer, constants.RetryCount, constants.RetryInterval)
 		if err != nil {
 			zap.L().Error("download sse companies failed", zap.Error(err), zap.String("url", url))
 			return nil, err
@@ -120,10 +121,10 @@ func (s Sse) Crawl(company *quotes.Company, date time.Time) (*quotes.CompanyDail
 	// 因为雅虎财经api中关于上海和深证交易所的股票拆分/送股信息是错误的，所以分红配股单独查询
 	dividend, split, err := s.sd.QuerySplitAndDividend(company, date)
 	if err != nil {
-		zap.L().Error("query split and dividend failed",
-			zap.Error(err),
-			zap.Any("company", company),
-			zap.Time("date", date))
+		// zap.L().Error("query split and dividend failed",
+		// 	zap.Error(err),
+		// 	zap.Any("company", company),
+		// 	zap.Time("date", date))
 		return nil, err
 	}
 

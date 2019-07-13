@@ -2,15 +2,14 @@ package sources
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strconv"
 	"time"
 
-	"github.com/nzai/netop"
 	"github.com/nzai/qr/constants"
 	"github.com/nzai/qr/quotes"
+	"github.com/nzai/qr/utils"
 	"go.uber.org/zap"
 )
 
@@ -30,31 +29,29 @@ func (s IFengFinance) QuerySplitAndDividend(company *quotes.Company, date time.T
 	url := fmt.Sprintf("http://app.finance.ifeng.com/data/stock/tab_fhpxjl.php?symbol=%s", company.Code)
 
 	// 查询凤凰财经数据接口,返回分红配股信息
-	response, err := netop.Get(url, netop.Retry(constants.RetryCount, constants.RetryInterval))
+	code, buffer, err := utils.TryDownloadBytes(url, constants.RetryCount, constants.RetryInterval)
 	if err != nil {
 		zap.L().Warn("download dividend and split failed", zap.Error(err), zap.String("url", url))
 		return nil, nil, err
 	}
-	defer response.Body.Close()
 
 	dividend := &quotes.Dividend{Enable: false, Timestamp: 0, Amount: 0}
 	split := &quotes.Split{Enable: false, Timestamp: 0, Numerator: 0, Denominator: 0}
 
 	// ignore on server forbidden
-	if response.StatusCode == http.StatusForbidden {
+	if code == http.StatusForbidden {
 		return dividend, split, nil
 	}
 
-	buffer, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		zap.L().Error("download dividend and split failed", zap.Error(err), zap.String("url", url))
-		return nil, nil, err
+	if code != http.StatusOK {
+		zap.L().Warn("unexpected response status", zap.Int("code", code))
+		return nil, nil, fmt.Errorf("unexpected response status (%d)%s", code, http.StatusText(code))
 	}
 
 	dateText := date.Format("2006-01-02")
 	for _, matches := range s.pattern.FindAllStringSubmatch(string(buffer), -1) {
 		if len(matches) != 5 {
-			zap.L().Error("ifeng finance html match count invalid",
+			zap.L().Warn("ifeng finance html match count invalid",
 				zap.Any("matches", matches),
 				zap.ByteString("html", buffer))
 			return nil, nil, fmt.Errorf("ifeng finance html match count invalid due to matches count: %d", len(matches))
@@ -68,7 +65,7 @@ func (s IFengFinance) QuerySplitAndDividend(company *quotes.Company, date time.T
 		// 派息
 		amount, err := strconv.ParseFloat(matches[1], 32)
 		if err != nil {
-			zap.L().Error("ifeng finance dividend invalid", zap.String("dividend", matches[3]))
+			zap.L().Warn("ifeng finance dividend invalid", zap.String("dividend", matches[3]))
 			return nil, nil, fmt.Errorf("ifeng finance dividend invalid due to dividend: %s", matches[3])
 		}
 
@@ -81,14 +78,14 @@ func (s IFengFinance) QuerySplitAndDividend(company *quotes.Company, date time.T
 		// 送股
 		numerator1, err := strconv.ParseFloat(matches[2], 32)
 		if err != nil {
-			zap.L().Error("ifeng finance split numerator invalid", zap.String("numerator", matches[1]))
+			zap.L().Warn("ifeng finance split numerator invalid", zap.String("numerator", matches[1]))
 			return nil, nil, fmt.Errorf("ifeng finance split numerator invalid due to numerator: %s", matches[1])
 		}
 
 		// 转增
 		numerator2, err := strconv.ParseFloat(matches[3], 32)
 		if err != nil {
-			zap.L().Error("ifeng finance split numerator invalid", zap.String("numerator", matches[2]))
+			zap.L().Warn("ifeng finance split numerator invalid", zap.String("numerator", matches[2]))
 			return nil, nil, fmt.Errorf("ifeng finance split numerator invalid due to numerator: %s", matches[2])
 		}
 

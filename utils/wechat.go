@@ -13,8 +13,6 @@ import (
 
 	"github.com/nzai/qr/config"
 	"github.com/nzai/qr/constants"
-
-	"github.com/nzai/netop"
 )
 
 var (
@@ -63,7 +61,7 @@ func (s *WeChatService) refreshAccessToken() error {
 	defer s.accessTokenMutex.Unlock()
 
 	url := fmt.Sprintf("https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=%s&corpsecret=%s", config.Get().WeChat.CorpID, config.Get().WeChat.AppSecret)
-	buffer, err := netop.GetBytes(url, netop.Retry(constants.RetryCount, constants.RetryInterval))
+	_, buffer, err := TryDownloadBytes(url, constants.RetryCount, constants.RetryInterval)
 	if err != nil {
 		zap.L().Error("get access token failed", zap.Error(err))
 		return err

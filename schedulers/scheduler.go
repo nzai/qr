@@ -17,6 +17,7 @@ import (
 type Scheduler struct {
 	store     stores.Store
 	exchanges []exchanges.Exchange
+	limiter   *Limiter
 }
 
 // NewScheduler create crawl scheduler
@@ -24,6 +25,7 @@ func NewScheduler(store stores.Store, exchanges ...exchanges.Exchange) *Schedule
 	return &Scheduler{
 		store:     store,
 		exchanges: exchanges,
+		limiter:   NewLimiter(constants.DefaultParallel),
 	}
 }
 
@@ -224,10 +226,6 @@ func (s Scheduler) crawlOneDay(exchange exchanges.Exchange, companies map[string
 
 // crawlCompaniesDailyQuote crawl company quotes in special day
 func (s Scheduler) crawlCompaniesDailyQuote(exchange exchanges.Exchange, companies map[string]*quotes.Company, date time.Time) (map[string]*quotes.CompanyDailyQuote, error) {
-	// limiter
-	ch := make(chan bool, constants.DefaultParallel)
-	defer close(ch)
-
 	wg := new(sync.WaitGroup)
 	wg.Add(len(companies))
 
@@ -236,19 +234,25 @@ func (s Scheduler) crawlCompaniesDailyQuote(exchange exchanges.Exchange, compani
 	for _, company := range companies {
 		go func(_company *quotes.Company) {
 			cdq, err := exchange.Crawl(_company, date)
-			// ignore error
+			// if err != nil {
+			// 	zap.L().Warn("crawl daily quote failed",
+			// 		zap.Error(err),
+			// 		zap.Any("company", company),
+			// 		zap.Time("date", date))
+			// }
+
 			if err == nil && !cdq.IsEmpty() {
 				mutex.Lock()
 				cdqs[_company.Code] = cdq
+				// zap.L().Debug("cdq success", zap.Any("company", _company), zap.Int(exchange.Code(), len(cdqs)))
 				mutex.Unlock()
 			}
 
-			<-ch
+			s.limiter.Release()
 			wg.Done()
 		}(company)
 
-		// limiter
-		ch <- false
+		s.limiter.Set()
 	}
 	wg.Wait()
 

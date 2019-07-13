@@ -4,9 +4,9 @@ import "time"
 
 const (
 	// RetryCount defind retry count
-	RetryCount = 6
+	RetryCount = 10
 	// RetryInterval define retry intervals
-	RetryInterval = time.Second * 10
+	RetryInterval = time.Second * 2
 	// DefaultParallel define default parallel
 	DefaultParallel = 64
 	// DatePattern define date compact pattern

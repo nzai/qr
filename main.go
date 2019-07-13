@@ -2,6 +2,8 @@ package main
 
 import (
 	"flag"
+	"log"
+	"os"
 	"time"
 
 	"github.com/nzai/qr/config"
@@ -10,26 +12,29 @@ import (
 	"github.com/nzai/qr/stores"
 	"github.com/nzai/qr/utils"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var (
 	configPath = flag.String("c", "config.toml", "toml config file path")
+	logPath    = flag.String("log", "log.txt", "log file path")
 )
 
 func main() {
-	conf := zap.NewDevelopmentConfig()
-	conf.DisableStacktrace = true
+	flag.Parse()
 
-	logger, _ := conf.Build()
+	logger, err := initLogger(*logPath)
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer logger.Sync()
 
 	undo := zap.ReplaceGlobals(logger)
 	defer undo()
 
-	flag.Parse()
-
 	// read config from file
-	_, err := config.Parse(*configPath)
+	_, err = config.Parse(*configPath)
 	if err != nil {
 		zap.L().Fatal("read config failed", zap.Error(err))
 	}
@@ -60,4 +65,32 @@ func main() {
 	scheduler := schedulers.NewScheduler(store, _exchanges...)
 	wg := scheduler.Run(startDate)
 	wg.Wait()
+}
+
+func initLogger(logPath string) (*zap.Logger, error) {
+	infoPriority := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+		return lvl >= zapcore.InfoLevel
+	})
+	debugPriority := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+		return lvl >= zapcore.DebugLevel
+	})
+
+	consoleWriter := zapcore.Lock(os.Stdout)
+
+	fileWriter := zapcore.AddSync(&lumberjack.Logger{
+		Filename:   logPath,
+		MaxSize:    100, // megabytes
+		MaxBackups: 10,
+		MaxAge:     30, // days
+	})
+
+	consoleEncoder := zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig())
+	fileEncoder := zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig())
+
+	core := zapcore.NewTee(
+		zapcore.NewCore(consoleEncoder, consoleWriter, infoPriority),
+		zapcore.NewCore(fileEncoder, fileWriter, debugPriority),
+	)
+
+	return zap.New(core, zap.AddCaller()), nil
 }
