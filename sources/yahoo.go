@@ -34,7 +34,7 @@ func (yahoo YahooFinance) Crawl(company *quotes.Company, date time.Time, suffix 
 		return nil, err
 	}
 
-	if code != http.StatusOK {
+	if code != http.StatusOK && code != http.StatusNotFound {
 		zap.L().Warn("download yahoo finance quote failed",
 			zap.Error(err),
 			zap.String("code", fmt.Sprintf("%d - %s", code, http.StatusText(code))),
