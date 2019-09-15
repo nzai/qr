@@ -57,70 +57,12 @@ func (c *Company) Decode(r io.Reader) error {
 
 // Equal check company is equal
 func (c Company) Equal(s Company) error {
-
 	if c.Code != s.Code {
 		return fmt.Errorf("company code %s is different from %s", c.Code, s.Code)
 	}
 
 	if c.Name != s.Name {
 		return fmt.Errorf("company name %s is different from %s", c.Name, s.Name)
-	}
-
-	return nil
-}
-
-// CompanyList use for sort companies
-type CompanyList []*Company
-
-func (l CompanyList) Len() int {
-	return len(l)
-}
-func (l CompanyList) Swap(i, j int) {
-	l[i], l[j] = l[j], l[i]
-}
-func (l CompanyList) Less(i, j int) bool {
-	return l[i].Code < l[j].Code
-}
-
-// Encode encode company list to io.Writer
-func (l CompanyList) Encode(w io.Writer) error {
-	bw := bio.NewBinaryWriter(w)
-
-	_, err := bw.Int(len(l))
-	if err != nil {
-		zap.L().Error("encode companies count failed", zap.Error(err), zap.Int("length", len(l)))
-		return err
-	}
-
-	for _, company := range l {
-		err = company.Encode(bw)
-		if err != nil {
-			zap.L().Error("encode company failed", zap.Error(err), zap.Any("company", company))
-			return err
-		}
-	}
-
-	return nil
-}
-
-// Decode decode company list from io.Reader
-func (l *CompanyList) Decode(r io.Reader) error {
-	br := bio.NewBinaryReader(r)
-
-	count, err := br.Int()
-	if err != nil {
-		zap.L().Error("decode companies count failed", zap.Error(err))
-		return err
-	}
-
-	*l = make([]*Company, count)
-	for index := 0; index < count; index++ {
-		(*l)[index] = new(Company)
-		err = (*l)[index].Decode(br)
-		if err != nil {
-			zap.L().Error("decode company failed", zap.Error(err))
-			return err
-		}
 	}
 
 	return nil
