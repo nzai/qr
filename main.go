@@ -8,6 +8,7 @@ import (
 
 	"github.com/nzai/qr/config"
 	"github.com/nzai/qr/exchanges"
+	"github.com/nzai/qr/notifiers"
 	"github.com/nzai/qr/schedulers"
 	"github.com/nzai/qr/stores"
 	"github.com/nzai/qr/utils"
@@ -34,7 +35,7 @@ func main() {
 	defer undo()
 
 	// read config from file
-	_, err = config.Parse(*configPath)
+	conf, err := config.Parse(*configPath)
 	if err != nil {
 		zap.L().Fatal("read config failed", zap.Error(err))
 	}
@@ -45,24 +46,31 @@ func main() {
 	}
 	zap.L().Debug("send start message success")
 
-	startDate := time.Now().AddDate(0, 0, -config.Get().LastDays) // yahoo finance limit
+	startDate := time.Now().AddDate(0, 0, -conf.LastDays) // yahoo finance limit
 
-	store, err := stores.Parse(config.Get().Stores)
+	store, err := stores.Parse(conf.Stores)
 	if err != nil {
 		zap.L().Fatal("parse store argument failed",
 			zap.Error(err),
-			zap.String("arg", config.Get().Stores))
+			zap.String("arg", conf.Stores))
 	}
 	defer store.Close()
 
-	_exchanges, err := exchanges.Parse(config.Get().Exchanges)
+	notifier := notifiers.NewNsq(conf.Nsq.Broker, conf.Nsq.TLSCert, conf.Nsq.TLSKey, conf.Nsq.Topic)
+	defer notifier.Close()
+
+	zap.L().Info("init nsq notifier success",
+		zap.String("broker", conf.Nsq.Broker),
+		zap.String("topic", conf.Nsq.Topic))
+
+	_exchanges, err := exchanges.Parse(conf.Exchanges)
 	if err != nil {
 		zap.L().Fatal("parse exchange argument failed",
 			zap.Error(err),
-			zap.String("arg", config.Get().Exchanges))
+			zap.String("arg", conf.Exchanges))
 	}
 
-	scheduler := schedulers.NewScheduler(store, _exchanges...)
+	scheduler := schedulers.NewScheduler(store, notifier, _exchanges...)
 	wg := scheduler.Run(startDate)
 	wg.Wait()
 }

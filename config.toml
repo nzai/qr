@@ -5,3 +5,9 @@ stores = "fs|/data"
 corp_id = "you corp id"
 app_id = 1000000
 app_secret = "you app secret"
+
+[nsq]
+broker = "127.0.0.1:8888"
+tls_cert = "cert.pem"
+tls_key = "key.pem"
+topic = "exchange_daily_finish"

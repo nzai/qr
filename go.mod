@@ -9,7 +9,6 @@ require (
 	github.com/fsnotify/fsnotify v1.4.7 // indirect
 	github.com/go-redis/redis v6.14.1+incompatible
 	github.com/golang/protobuf v1.2.0 // indirect
-	github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db // indirect
 	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20180825215210-0210a2f0f73c // indirect
 	github.com/guotie/gogb2312 v0.0.0-20160513031741-a052a05f3e7e
@@ -18,6 +17,7 @@ require (
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/mozillazg/go-cos v0.9.0
 	github.com/mozillazg/go-httpheader v0.2.0 // indirect
+	github.com/nsqio/go-nsq v1.0.8
 	github.com/nzai/bio v0.1.2
 	github.com/onsi/ginkgo v1.6.0 // indirect
 	github.com/onsi/gomega v1.4.1 // indirect
@@ -38,3 +38,5 @@ require (
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v2 v2.2.1 // indirect
 )
+
+go 1.13

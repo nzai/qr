@@ -7,6 +7,7 @@ import (
 
 	"github.com/nzai/qr/constants"
 	"github.com/nzai/qr/exchanges"
+	"github.com/nzai/qr/notifiers"
 	"github.com/nzai/qr/quotes"
 	"github.com/nzai/qr/stores"
 	"github.com/nzai/qr/utils"
@@ -16,14 +17,16 @@ import (
 // Scheduler define a crawl scheduler
 type Scheduler struct {
 	store     stores.Store
+	notifier  notifiers.Notifier
 	exchanges []exchanges.Exchange
 	limiter   *Limiter
 }
 
 // NewScheduler create crawl scheduler
-func NewScheduler(store stores.Store, exchanges ...exchanges.Exchange) *Scheduler {
+func NewScheduler(store stores.Store, notifier notifiers.Notifier, exchanges ...exchanges.Exchange) *Scheduler {
 	return &Scheduler{
 		store:     store,
+		notifier:  notifier,
 		exchanges: exchanges,
 		limiter:   NewLimiter(constants.DefaultParallel),
 	}
@@ -167,14 +170,26 @@ func (s Scheduler) crawl(exchange exchanges.Exchange, dates ...time.Time) error 
 		zap.Int("companies", len(companies)))
 
 	for _, date := range dates {
+		result := &notifiers.ExchangeDailyJobResult{
+			Exchange: exchange.Code(),
+			Date:     date.Unix(),
+			Success:  true,
+		}
+
 		err = s.crawlOneDay(exchange, companies, date)
 		if err != nil {
 			zap.L().Error("crawl exchange companies failed",
 				zap.Error(err),
 				zap.String("exchange", exchange.Code()),
 				zap.Time("date", date))
+
+			result.Success = false
+			s.notifier.Notify(result)
+
 			return err
 		}
+
+		s.notifier.Notify(result)
 	}
 
 	return nil
