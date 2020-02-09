@@ -63,6 +63,13 @@ func Parse(arg string) (Store, error) {
 		})
 
 		return NewCos(client), nil
+	case "influxdb":
+		if len(parts) < 3 {
+			zap.L().Error("store arg invalid", zap.String("arg", arg))
+			return nil, fmt.Errorf("store arg invalid: %s", arg)
+		}
+
+		return NewInfluxDB(parts[1], parts[2]), nil
 	default:
 		zap.L().Error("store type invalid", zap.String("type", parts[0]))
 		return nil, fmt.Errorf("store type invalid: %s", parts[0])
