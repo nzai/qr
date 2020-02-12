@@ -39,10 +39,10 @@ func (s Sync) Run() *sync.WaitGroup {
 				zap.L().Error("sync exchange daily quote failed",
 					zap.Error(err),
 					zap.String("exchange", exchange.Code()))
-				
+
 			} else {
 				zap.L().Info("sync exchange daily quote finished",
-				zap.String("exchange", exchange.Code()))
+					zap.String("exchange", exchange.Code()))
 			}
 
 			_wg.Done()
@@ -105,6 +105,12 @@ func (s Sync) syncExchangeDate(exchange exchanges.Exchange, date time.Time) (boo
 	for index := 0; index < constants.RetryCount; index++ {
 		exists, err = s.syncExchangeDateOnce(exchange, date)
 		if err == nil {
+			if index > 0 {
+				zap.L().Info("sync exchange daily quote success",
+					zap.String("exchange", exchange.Code()),
+					zap.Time("date", date),
+					zap.String("retries", fmt.Sprintf("%d/%d", index+1, constants.RetryCount)))
+			}
 			return exists, nil
 		}
 
