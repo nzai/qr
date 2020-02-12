@@ -14,3 +14,4 @@ qr
 *.zip
 cmd/qsync/qsync
 log.txt
+*.sh
