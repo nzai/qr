@@ -155,7 +155,6 @@ func (s InfluxDB) saveCompanyDailQuote(exchange exchanges.Exchange, date time.Ti
 	tags := map[string]string{
 		"exchange": exchange.Code(),
 		"company":  cdq.Company.Code,
-		"date":     date.Format(constants.DatePattern),
 	}
 
 	if cdq.Dividend != nil {
@@ -473,12 +472,13 @@ func (s InfluxDB) loadSplit(exchange exchanges.Exchange, date time.Time, company
 }
 
 func (s InfluxDB) loadCompanyDailyQuoteSerial(exchange exchanges.Exchange, date time.Time, company *quotes.Company, st quotes.SerialType) (*quotes.Serial, error) {
-	command := fmt.Sprintf("select open, close, high, low, volume from %s where exchange='%s' and company='%s' and date='%s' and serial='%s'",
+	command := fmt.Sprintf("select open, close, high, low, volume from %s where exchange='%s' and company='%s' and serial='%s' and time >= '%s' and time < '%s'",
 		minuteQuoteMeasurementName,
 		exchange.Code(),
 		company.Code,
-		date.Format(constants.DatePattern),
-		st.String())
+		st.String(),
+		date.Format("2006-01-02 15:04:05"),
+		date.AddDate(0, 0, 1).Format("2006-01-02 15:04:05"))
 
 	response, err := s.client.Query(client.NewQuery(command, s.db, ""))
 	if err != nil {
