@@ -502,14 +502,6 @@ func (s LevelDB) Delete(exchange exchanges.Exchange, date time.Time) error {
 		return err
 	}
 
-	if err != nil {
-		zap.L().Error("delete exchange daily quote failed",
-			zap.Error(err),
-			zap.String("exchange", exchange.Code()),
-			zap.Time("date", date))
-		return err
-	}
-
 	return nil
 }
 
