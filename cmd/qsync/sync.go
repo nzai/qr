@@ -63,6 +63,12 @@ func (s Sync) syncExchange(exchange exchanges.Exchange) error {
 	processed := 0
 
 	for date.Before(endDate) {
+		zap.L().Info(fmt.Sprintf("(%.2f%%) start", float64(processed)*100/float64(total)),
+			zap.String("exchange", exchange.Code()),
+			zap.Time("date", date),
+			zap.String("d", date.Weekday().String()),
+			zap.String("process", fmt.Sprintf("%d/%d", processed, total)))
+
 		exists, err := s.syncExchangeDate(exchange, date)
 		if err != nil {
 			return err
