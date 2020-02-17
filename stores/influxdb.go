@@ -600,3 +600,49 @@ func (s InfluxDB) loadCompanyDailyQuoteSerial(exchange exchanges.Exchange, date 
 
 	return &_serial, nil
 }
+
+// Delete delete exchange daily quote
+func (s InfluxDB) Delete(exchange exchanges.Exchange, date time.Time) error {
+	commands := []string{
+		fmt.Sprintf("drop series from %s where exchange='%s' and date='%s'",
+			companiesMeasurementName,
+			exchange.Code(),
+			date.Format(constants.DatePattern)),
+		fmt.Sprintf("drop series from %s where exchange='%s' and date='%s'",
+			dividendMeasurementName,
+			exchange.Code(),
+			date.Format(constants.DatePattern)),
+		fmt.Sprintf("drop series from %s where exchange='%s' and date='%s'",
+			splitMeasurementName,
+			exchange.Code(),
+			date.Format(constants.DatePattern)),
+		fmt.Sprintf("drop series from %s where exchange='%s' and date='%s'",
+			minuteQuoteMeasurementName,
+			exchange.Code(),
+			date.Format(constants.DatePattern)),
+	}
+
+	for _, command := range commands {
+		response, err := s.client.Query(client.NewQuery(command, s.db, ""))
+		if err != nil {
+			zap.L().Error("delete exchange daily quote failed",
+				zap.Error(err),
+				zap.String("exchange", exchange.Code()),
+				zap.Time("date", date),
+				zap.String("command", command))
+			return err
+		}
+
+		err = response.Error()
+		if err != nil {
+			zap.L().Error("delete exchange daily quote failed",
+				zap.Error(err),
+				zap.String("exchange", exchange.Code()),
+				zap.Time("date", date),
+				zap.String("command", command))
+			return err
+		}
+	}
+
+	return nil
+}

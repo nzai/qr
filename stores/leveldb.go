@@ -459,3 +459,122 @@ func (s LevelDB) readQuoteBuffer(key, value []byte) (*quotes.Quote, error) {
 
 	return quote, nil
 }
+
+// Delete delete exchange daily quote
+func (s LevelDB) Delete(exchange exchanges.Exchange, date time.Time) error {
+	edq, err := s.Load(exchange, date)
+	if err != nil {
+		zap.L().Error("load exchange daily quotes failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Time("date", date))
+		return err
+	}
+
+	// create quote delete batch
+	batch := s.createDeleteBatch(exchange, date, edq)
+
+	trans, err := s.db.OpenTransaction()
+	if err != nil {
+		zap.L().Error("open db transaction failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Time("date", date))
+		return err
+	}
+	defer trans.Discard()
+
+	err = trans.Write(batch, nil)
+	if err != nil {
+		zap.L().Error("batch delete failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Time("date", date))
+		return err
+	}
+
+	err = trans.Commit()
+	if err != nil {
+		zap.L().Error("commit db transaction failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Time("date", date))
+		return err
+	}
+
+	if err != nil {
+		zap.L().Error("delete exchange daily quote failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Time("date", date))
+		return err
+	}
+
+	return nil
+}
+
+func (s LevelDB) createDeleteBatch(exchange exchanges.Exchange, date time.Time, edq *quotes.ExchangeDailyQuote) *leveldb.Batch {
+	batch := new(leveldb.Batch)
+	batch.Delete([]byte(fmt.Sprintf("%s:%s", exchange.Code(), date.Format(constants.DatePattern))))
+
+	// delete exchange daily
+	// key: {exchange}:{date} value:1 / 0 (is trading day)
+	if edq.IsEmpty() {
+		return batch
+	}
+
+	// delete exchange daily companies
+	// key: {exchange}:{date}:{companyCode} value:{companyName}
+	for _, company := range edq.Companies {
+		batch.Delete([]byte(fmt.Sprintf("%s:%s:%s", exchange.Code(), date.Format(constants.DatePattern), company.Code)))
+	}
+
+	// save exchange daily company quotes
+	for _, cdq := range edq.Quotes {
+		// delete company rollup
+		// key: {exchange}:{companyCode}:{date} value:{open},{close},{high},{low},{volume}
+		batch.Delete([]byte(fmt.Sprintf("%s:%s:%s", exchange.Code(), cdq.Company.Code, date.Format(constants.DatePattern))))
+
+		// delete dividend
+		// key: {exchange}:{companyCode}:dividend:{date} value:{timestamp},{amount}
+		if cdq.Dividend != nil && cdq.Dividend.Enable {
+			batch.Delete([]byte(fmt.Sprintf("%s:%s:%s", exchange.Code(), cdq.Company.Code, date.Format(constants.DatePattern))))
+		}
+
+		// delete split
+		// key: {exchange}:{companyCode}:split:{date} value:{timestamp},{numerator},{denominator}
+		if cdq.Split != nil && cdq.Split.Enable {
+			batch.Delete([]byte(fmt.Sprintf("%s:%s:split:%s", exchange.Code(), cdq.Company.Code, date.Format(constants.DatePattern))))
+		}
+
+		// delete pre
+		// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
+		s.deleteCompanyDailyQuoteSerial(batch, exchange, cdq.Company, date, quotes.SerialTypePre, cdq.Pre)
+
+		// delete regular
+		// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
+		s.deleteCompanyDailyQuoteSerial(batch, exchange, cdq.Company, date, quotes.SerialTypeRegular, cdq.Regular)
+
+		// delete post
+		// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
+		s.deleteCompanyDailyQuoteSerial(batch, exchange, cdq.Company, date, quotes.SerialTypePost, cdq.Post)
+	}
+
+	return batch
+}
+
+func (s LevelDB) deleteCompanyDailyQuoteSerial(batch *leveldb.Batch, exchange exchanges.Exchange, company *quotes.Company, date time.Time, serialType quotes.SerialType, serial *quotes.Serial) {
+	if serial == nil {
+		return
+	}
+
+	for _, quote := range *serial {
+		// key: {exchange}:{companyCode}:{date}:Pre:{timestamp}	value:{open},{close},{high},{low},{volume}
+		batch.Delete([]byte(fmt.Sprintf("%s:%s:%s:%s:%d",
+			exchange.Code(),
+			company.Code,
+			date.Format(constants.DatePattern),
+			serialType.String(),
+			quote.Timestamp)))
+	}
+}

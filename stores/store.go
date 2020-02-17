@@ -21,6 +21,8 @@ type Store interface {
 	Save(exchanges.Exchange, time.Time, *quotes.ExchangeDailyQuote) error
 	// Load load exchange daily quote
 	Load(exchanges.Exchange, time.Time) (*quotes.ExchangeDailyQuote, error)
+	// Delete delete exchange daily quote
+	Delete(exchanges.Exchange, time.Time) error
 	// Close close exchange daily quote store
 	Close() error
 }

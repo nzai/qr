@@ -493,6 +493,95 @@ func (s Redis) getScanRange(prefix string) (string, string) {
 	return prefix, prefix
 }
 
+// Delete delete exchange daily quote
+func (s Redis) Delete(exchange exchanges.Exchange, date time.Time) error {
+	edq, err := s.Load(exchange, date)
+	if err != nil {
+		zap.L().Error("load exchange daily quotes failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Time("date", date))
+		return err
+	}
+
+	var keys []string
+
+	// key: et:{exchange}:{date} value:1 / 0 (is trading day)
+	keys = append(keys, fmt.Sprintf("et:%s:%s", exchange.Code(), date.Format(constants.DatePattern)))
+
+	// delete exchange daily companies
+	// key: ec:{exchange}:{date}:{companyCode} value:{companyName}
+	for _, company := range edq.Companies {
+		keys = append(keys, fmt.Sprintf("ec:%s:%s:%s", exchange.Code(), date.Format(constants.DatePattern), company.Code))
+	}
+
+	// delete exchange daily company quotes
+	for _, cdq := range edq.Quotes {
+		// delete company rollup
+		// key: 1d:{exchange}:{companyCode}:{date} value:{open},{close},{high},{low},{volume}
+		keys = append(keys, fmt.Sprintf("1d:%s:%s:%s", exchange.Code(), cdq.Company.Code, date.Format(constants.DatePattern)))
+
+		// delete dividend
+		if cdq.Dividend != nil && cdq.Dividend.Enable {
+			// key: dividend:{exchange}:{companyCode}:{date} value:{timestamp},{amount}
+			keys = append(keys, fmt.Sprintf("dividend:%s:%s:%s", exchange.Code(), cdq.Company.Code, date.Format(constants.DatePattern)))
+		}
+
+		// delete split
+		if cdq.Split != nil && cdq.Split.Enable {
+			// key: split:{exchange}:{companyCode}:{date} value:{timestamp},{numerator},{denominator}
+			keys = append(keys, fmt.Sprintf("split:%s:%s:%s", exchange.Code(), cdq.Company.Code, date.Format(constants.DatePattern)))
+		}
+
+		// delete pre
+		keys = append(keys, s.createDeleteCompanyDailyQuoteSerialKeys(exchange, cdq.Company, date, quotes.SerialTypePre, cdq.Pre)...)
+
+		// delete regular
+		keys = append(keys, s.createDeleteCompanyDailyQuoteSerialKeys(exchange, cdq.Company, date, quotes.SerialTypeRegular, cdq.Regular)...)
+
+		// delete post
+		keys = append(keys, s.createDeleteCompanyDailyQuoteSerialKeys(exchange, cdq.Company, date, quotes.SerialTypePost, cdq.Post)...)
+	}
+
+	err = s.client.Del(keys...).Err()
+	if err != nil {
+		zap.L().Error("delete exchange daily quote failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Time("date", date),
+			zap.Int("keys", len(keys)))
+		return err
+	}
+
+	zap.L().Debug("delete exchange daily quote success",
+		zap.Error(err),
+		zap.String("exchange", exchange.Code()),
+		zap.Time("date", date),
+		zap.Int("keys", len(keys)))
+
+	return nil
+}
+
+func (s Redis) createDeleteCompanyDailyQuoteSerialKeys(exchange exchanges.Exchange, company *quotes.Company, date time.Time, serialType quotes.SerialType, serial *quotes.Serial) []string {
+	if serial == nil || len(*serial) == 0 {
+		return []string{}
+	}
+
+	dateText := date.Format(constants.DatePattern)
+	keys := make([]string, len(*serial))
+	for index, quote := range *serial {
+		// key: 1m:{exchange}:{companyCode}:{date}:{Pre|Regular|Post}:{timestamp} value:{open},{close},{high},{low},{volume}
+		keys[index] = fmt.Sprintf("1m:%s:%s:%s:%s:%d",
+			exchange.Code(),
+			company.Code,
+			dateText,
+			serialType.String(),
+			quote.Timestamp)
+	}
+
+	return keys
+}
+
 // KV key value pair
 type KV struct {
 	Key   string

@@ -120,6 +120,22 @@ func (s Cos) Load(exchange exchanges.Exchange, date time.Time) (*quotes.Exchange
 	return edq, nil
 }
 
+// Delete delete exchange daily quote
+func (s Cos) Delete(exchange exchanges.Exchange, date time.Time) error {
+	key := s.storePath(exchange, date)
+	_, err := s.client.Object.Delete(context.Background(), key)
+	if err != nil {
+		zap.L().Error("delete exchange daily quote failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.Time("date", date),
+			zap.String("key", key))
+		return err
+	}
+
+	return nil
+}
+
 // Close close store
 func (s Cos) Close() error {
 	return nil
