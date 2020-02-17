@@ -14,10 +14,11 @@ import (
 )
 
 const (
-	companiesMeasurementName   = "companies"
-	dividendMeasurementName    = "dividends"
-	splitMeasurementName       = "splits"
-	minuteQuoteMeasurementName = "q1m"
+	companiesMeasurementName     = "companies"
+	dividendMeasurementName      = "dividends"
+	splitMeasurementName         = "splits"
+	minutelyQuoteMeasurementName = "q1m"
+	dailyQuoteMeasurementName    = "q1d"
 )
 
 // InfluxDB influxdb store
@@ -154,8 +155,19 @@ func (s InfluxDB) saveCompanyDailQuote(exchange exchanges.Exchange, date time.Ti
 
 	tags := map[string]string{
 		"exchange": exchange.Code(),
+		"date":     date.Format(constants.DatePattern),
 		"company":  cdq.Company.Code,
 	}
+
+	rollup := cdq.Regular.Rollup()
+	rollupPoint, _ := client.NewPoint(dailyQuoteMeasurementName, tags, map[string]interface{}{
+		"open":   rollup.Open,
+		"close":  rollup.Close,
+		"high":   rollup.High,
+		"low":    rollup.Low,
+		"volume": int64(rollup.Volume),
+	}, date)
+	bp.AddPoint(rollupPoint)
 
 	if cdq.Dividend != nil {
 		dividend, _ := client.NewPoint(dividendMeasurementName, tags, map[string]interface{}{
@@ -197,7 +209,7 @@ func (s InfluxDB) createQuoteSerialPoints(serial *quotes.Serial, st quotes.Seria
 	tags["serial"] = st.String()
 	points := make([]*client.Point, 0, len(*serial))
 	for _, quote := range *serial {
-		q, _ := client.NewPoint(minuteQuoteMeasurementName, tags, map[string]interface{}{
+		q, _ := client.NewPoint(minutelyQuoteMeasurementName, tags, map[string]interface{}{
 			"open":   quote.Open,
 			"close":  quote.Close,
 			"high":   quote.High,
@@ -220,6 +232,10 @@ func (s InfluxDB) Load(exchange exchanges.Exchange, date time.Time) (*quotes.Exc
 	cdqs := make(map[string]*quotes.CompanyDailyQuote, len(companies))
 	for _, company := range companies {
 		cdq, err := s.loadCompanyDailyQuote(exchange, date, company)
+		if err == constants.ErrRecordNotFound {
+			continue
+		}
+
 		if err != nil {
 			return nil, err
 		}
@@ -283,6 +299,11 @@ func (s InfluxDB) loadCompanies(exchange exchanges.Exchange, date time.Time) (ma
 }
 
 func (s InfluxDB) loadCompanyDailyQuote(exchange exchanges.Exchange, date time.Time, company *quotes.Company) (*quotes.CompanyDailyQuote, error) {
+	_, err := s.loadCompanyDailyRollup(exchange, date, company)
+	if err != nil {
+		return nil, err
+	}
+
 	dividend, err := s.loadDividend(exchange, date, company)
 	if err != nil {
 		return nil, err
@@ -315,6 +336,118 @@ func (s InfluxDB) loadCompanyDailyQuote(exchange exchanges.Exchange, date time.T
 		Pre:      pre,
 		Regular:  regular,
 		Post:     post,
+	}, nil
+}
+
+func (s InfluxDB) loadCompanyDailyRollup(exchange exchanges.Exchange, date time.Time, company *quotes.Company) (*quotes.Quote, error) {
+	command := fmt.Sprintf("select open, close, high, low, volume from %s where exchange='%s' and company='%s' and date='%s'",
+		dailyQuoteMeasurementName,
+		exchange.Code(),
+		company.Code,
+		date.Format(constants.DatePattern))
+
+	response, err := s.client.Query(client.NewQuery(command, s.db, ""))
+	if err != nil {
+		zap.L().Error("query company daily rollup failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.String("company", company.Code),
+			zap.Time("date", date))
+		return nil, err
+	}
+
+	err = response.Error()
+	if err != nil {
+		zap.L().Error("query company daily rollup failed",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.String("company", company.Code),
+			zap.Time("date", date))
+		return nil, err
+	}
+
+	if len(response.Results) == 0 ||
+		len(response.Results[0].Series) == 0 ||
+		len(response.Results[0].Series[0].Values) == 0 ||
+		len(response.Results[0].Series[0].Values[0]) != 6 {
+		return nil, constants.ErrRecordNotFound
+	}
+
+	values := response.Results[0].Series[0].Values[0]
+
+	t, err := time.Parse(time.RFC3339, values[0].(string))
+	if err != nil {
+		zap.L().Error("invalid quote timestamp",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.String("company", company.Code),
+			zap.Time("date", date),
+			zap.Any("timestamp", values[0]))
+		return nil, err
+	}
+
+	open, err := values[1].(json.Number).Float64()
+	if err != nil {
+		zap.L().Error("invalid quote open",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.String("company", company.Code),
+			zap.Time("date", date),
+			zap.Any("open", values[1]))
+		return nil, err
+	}
+
+	_close, err := values[2].(json.Number).Float64()
+	if err != nil {
+		zap.L().Error("invalid quote close",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.String("company", company.Code),
+			zap.Time("date", date),
+			zap.Any("close", values[2]))
+		return nil, err
+	}
+
+	high, err := values[3].(json.Number).Float64()
+	if err != nil {
+		zap.L().Error("invalid quote high",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.String("company", company.Code),
+			zap.Time("date", date),
+			zap.Any("high", values[3]))
+		return nil, err
+	}
+
+	low, err := values[4].(json.Number).Float64()
+	if err != nil {
+		zap.L().Error("invalid quote low",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.String("company", company.Code),
+			zap.Time("date", date),
+			zap.Any("low", values[4]))
+		return nil, err
+	}
+
+	volume, err := values[5].(json.Number).Int64()
+	if err != nil {
+		zap.L().Error("invalid quote volume",
+			zap.Error(err),
+			zap.String("exchange", exchange.Code()),
+			zap.String("company", company.Code),
+			zap.Time("date", date),
+			zap.Any("volume", values[5]))
+		return nil, err
+	}
+
+	return &quotes.Quote{
+		Timestamp: uint64(t.Unix()),
+		Open:      float32(open),
+		Close:     float32(_close),
+		High:      float32(high),
+		Low:       float32(low),
+		Volume:    uint64(volume),
 	}, nil
 }
 
@@ -472,13 +605,12 @@ func (s InfluxDB) loadSplit(exchange exchanges.Exchange, date time.Time, company
 }
 
 func (s InfluxDB) loadCompanyDailyQuoteSerial(exchange exchanges.Exchange, date time.Time, company *quotes.Company, st quotes.SerialType) (*quotes.Serial, error) {
-	command := fmt.Sprintf("select open, close, high, low, volume from %s where exchange='%s' and company='%s' and serial='%s' and time >= '%s' and time < '%s'",
-		minuteQuoteMeasurementName,
+	command := fmt.Sprintf("select open, close, high, low, volume from %s where exchange='%s' and company='%s' and serial='%s' and date='%s'",
+		minutelyQuoteMeasurementName,
 		exchange.Code(),
 		company.Code,
 		st.String(),
-		date.Format("2006-01-02 15:04:05"),
-		date.AddDate(0, 0, 1).Format("2006-01-02 15:04:05"))
+		date.Format(constants.DatePattern))
 
 	response, err := s.client.Query(client.NewQuery(command, s.db, ""))
 	if err != nil {
@@ -617,7 +749,11 @@ func (s InfluxDB) Delete(exchange exchanges.Exchange, date time.Time) error {
 			exchange.Code(),
 			date.Format(constants.DatePattern)),
 		fmt.Sprintf("drop series from %s where exchange='%s' and date='%s'",
-			minuteQuoteMeasurementName,
+			minutelyQuoteMeasurementName,
+			exchange.Code(),
+			date.Format(constants.DatePattern)),
+		fmt.Sprintf("drop series from %s where exchange='%s' and date='%s'",
+			dailyQuoteMeasurementName,
 			exchange.Code(),
 			date.Format(constants.DatePattern)),
 	}
