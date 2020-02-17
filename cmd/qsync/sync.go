@@ -60,7 +60,8 @@ func (s Sync) syncExchange(exchange exchanges.Exchange) error {
 	endDate := utils.TodayZero(startTime.In(exchange.Location()))
 
 	total := int(endDate.Sub(date).Hours() / 24)
-	processed := 0
+	var processed int
+	var dpq time.Duration
 
 	for date.Before(endDate) {
 		zap.L().Info(fmt.Sprintf("(%.2f%%) start", float64(processed)*100/float64(total)),
@@ -80,11 +81,12 @@ func (s Sync) syncExchange(exchange exchanges.Exchange) error {
 			processed++
 
 			passed := time.Now().Sub(startTime)
-			qps := float64(0)
+
 			speed := float64(processed) / passed.Seconds()
 
-			if speed != 0 {
-				qps = float64(1) / speed
+			if processed != 0 {
+				dpq = passed / time.Duration(processed)
+
 			}
 			remain := time.Duration(float64(total-processed)/speed) * time.Second
 
@@ -93,9 +95,8 @@ func (s Sync) syncExchange(exchange exchanges.Exchange) error {
 				zap.Time("date", date),
 				zap.String("d", date.Weekday().String()),
 				zap.String("process", fmt.Sprintf("%d/%d", processed, total)),
-				zap.Float64("qps", qps),
-				zap.Duration("remain", remain),
-			)
+				zap.String("dpq", dpq.String()),
+				zap.Duration("remain", remain))
 		}
 
 		date = date.AddDate(0, 0, 1)
@@ -196,6 +197,16 @@ func (s Sync) syncExchangeDateOnce(exchange exchanges.Exchange, date time.Time) 
 			zap.Error(err),
 			zap.String("exchange", exchange.Code()),
 			zap.Time("date", date))
+
+		err1 := s.dest.Delete(exchange, date)
+		if err1 != nil {
+			zap.L().Error("delete dest exchange daily quote failed",
+				zap.Error(err1),
+				zap.String("exchange", exchange.Code()),
+				zap.Time("date", date))
+			return false, err1
+		}
+
 		return false, err
 	}
 
