@@ -72,6 +72,18 @@ func Parse(arg string) (Store, error) {
 		}
 
 		return NewInfluxDB(parts[1], parts[2]), nil
+	case "s3":
+		if len(parts) < 5 {
+			zap.L().Error("store arg invalid", zap.String("arg", arg))
+			return nil, fmt.Errorf("store arg invalid: %s", arg)
+		}
+
+		return NewS3(&S3Config{
+			AccessKeyID:     parts[1],
+			SecretAccessKey: parts[2],
+			Region:          parts[3],
+			Bucket:          parts[4],
+		}), nil
 	default:
 		zap.L().Error("store type invalid", zap.String("type", parts[0]))
 		return nil, fmt.Errorf("store type invalid: %s", parts[0])
