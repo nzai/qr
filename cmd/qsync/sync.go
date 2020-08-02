@@ -61,7 +61,6 @@ func (s Sync) syncExchange(exchange exchanges.Exchange) error {
 
 	total := int(endDate.Sub(date).Hours() / 24)
 	var processed int
-	var dpq time.Duration
 
 	for date.Before(endDate) {
 		zap.L().Info(fmt.Sprintf("(%.2f%%) start", float64(processed)*100/float64(total)),
@@ -69,6 +68,8 @@ func (s Sync) syncExchange(exchange exchanges.Exchange) error {
 			zap.Time("date", date),
 			zap.String("d", date.Weekday().String()),
 			zap.String("process", fmt.Sprintf("%d/%d", processed, total)))
+
+		start := time.Now()
 
 		exists, err := s.syncExchangeDate(exchange, date)
 		if err != nil {
@@ -81,21 +82,14 @@ func (s Sync) syncExchange(exchange exchanges.Exchange) error {
 			processed++
 
 			passed := time.Now().Sub(startTime)
-
 			speed := float64(processed) / passed.Seconds()
-
-			if processed != 0 {
-				dpq = passed / time.Duration(processed)
-
-			}
 			remain := time.Duration(float64(total-processed)/speed) * time.Second
 
 			zap.L().Info(fmt.Sprintf("(%.2f%%) synced", float64(processed)*100/float64(total)),
 				zap.String("exchange", exchange.Code()),
 				zap.Time("date", date),
-				zap.String("d", date.Weekday().String()),
+				zap.Duration("d", time.Now().Sub(start)),
 				zap.String("process", fmt.Sprintf("%d/%d", processed, total)),
-				zap.String("dpq", dpq.String()),
 				zap.Duration("remain", remain))
 		}
 
@@ -163,6 +157,7 @@ func (s Sync) syncExchangeDateOnce(exchange exchanges.Exchange, date time.Time) 
 		return false, nil
 	}
 
+	start := time.Now()
 	edq, err := s.source.Load(exchange, date)
 	if err != nil {
 		zap.L().Error("load exchange daily quote failed",
@@ -171,7 +166,12 @@ func (s Sync) syncExchangeDateOnce(exchange exchanges.Exchange, date time.Time) 
 			zap.Time("date", date))
 		return false, err
 	}
+	zap.L().Info("load source success",
+		zap.Duration("d", time.Now().Sub(start)),
+		zap.String("exchange", exchange.Code()),
+		zap.Time("date", date))
 
+	start = time.Now()
 	err = s.dest.Save(exchange, date, edq)
 	if err != nil {
 		zap.L().Error("save exchange daily quote failed",
@@ -180,7 +180,12 @@ func (s Sync) syncExchangeDateOnce(exchange exchanges.Exchange, date time.Time) 
 			zap.Time("date", date))
 		return false, err
 	}
+	zap.L().Info("save dest success",
+		zap.Duration("d", time.Now().Sub(start)),
+		zap.String("exchange", exchange.Code()),
+		zap.Time("date", date))
 
+	start = time.Now()
 	// validate
 	saved, err := s.dest.Load(exchange, date)
 	if err != nil {
@@ -190,6 +195,10 @@ func (s Sync) syncExchangeDateOnce(exchange exchanges.Exchange, date time.Time) 
 			zap.Time("date", date))
 		return false, err
 	}
+	zap.L().Info("load dest success",
+		zap.Duration("d", time.Now().Sub(start)),
+		zap.String("exchange", exchange.Code()),
+		zap.Time("date", date))
 
 	err = saved.Equal(*edq)
 	if err != nil {

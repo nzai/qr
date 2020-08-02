@@ -15,3 +15,5 @@ qr
 cmd/qsync/qsync
 log.txt
 *.sh
+*.sql
+*.log

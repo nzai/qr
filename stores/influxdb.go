@@ -98,14 +98,37 @@ func (s InfluxDB) Exists(exchange exchanges.Exchange, date time.Time) (bool, err
 
 // Save save exchange daily quote
 func (s InfluxDB) Save(exchange exchanges.Exchange, date time.Time, edq *quotes.ExchangeDailyQuote) error {
-	err := s.saveCompanies(exchange, date, edq.Companies)
-	if err != nil {
-		return err
-	}
+	var batchPoints []*client.Point
+
+	points := s.createCompanyPoints(exchange, date, edq.Companies)
+	batchPoints = append(batchPoints, points...)
 
 	for _, cdq := range edq.Quotes {
-		err = s.saveCompanyDailQuote(exchange, date, cdq)
+		points = s.creteCompanyDailQuotePoints(exchange, date, cdq)
+		batchPoints = append(batchPoints, points...)
+	}
+
+	batchSize := 10240
+	var start, end int
+	for start = 0; start < len(batchPoints); start += batchSize {
+		end = start + batchSize
+		if end >= len(batchPoints) {
+			end = len(batchPoints)
+		}
+
+		bp, _ := client.NewBatchPoints(client.BatchPointsConfig{
+			Precision: "s",
+			Database:  "quotes",
+		})
+
+		bp.AddPoints(batchPoints[start:end])
+
+		err := s.client.Write(bp)
 		if err != nil {
+			zap.L().Error("save company daily quote batch points failed",
+				zap.Error(err),
+				zap.String("exchange", exchange.Code()),
+				zap.Time("date", date))
 			return err
 		}
 	}
@@ -113,17 +136,13 @@ func (s InfluxDB) Save(exchange exchanges.Exchange, date time.Time, edq *quotes.
 	return nil
 }
 
-func (s InfluxDB) saveCompanies(exchange exchanges.Exchange, date time.Time, companies map[string]*quotes.Company) error {
-	bp, _ := client.NewBatchPoints(client.BatchPointsConfig{
-		Precision: "s",
-		Database:  "quotes",
-	})
-
+func (s InfluxDB) createCompanyPoints(exchange exchanges.Exchange, date time.Time, companies map[string]*quotes.Company) []*client.Point {
 	tags := map[string]string{
 		"exchange": exchange.Code(),
 		"date":     date.Format(constants.DatePattern),
 	}
 
+	points := make([]*client.Point, 0, len(companies))
 	t := date
 	for _, company := range companies {
 		p, _ := client.NewPoint(companiesMeasurementName, tags, map[string]interface{}{
@@ -131,27 +150,15 @@ func (s InfluxDB) saveCompanies(exchange exchanges.Exchange, date time.Time, com
 			"name": company.Name,
 		}, t)
 
-		bp.AddPoint(p)
+		points = append(points, p)
 		t = t.Add(time.Second)
 	}
 
-	err := s.client.Write(bp)
-	if err != nil {
-		zap.L().Error("save companies batch points failed",
-			zap.Error(err),
-			zap.String("exchange", exchange.Code()),
-			zap.Time("date", date))
-		return err
-	}
-
-	return nil
+	return points
 }
 
-func (s InfluxDB) saveCompanyDailQuote(exchange exchanges.Exchange, date time.Time, cdq *quotes.CompanyDailyQuote) error {
-	bp, _ := client.NewBatchPoints(client.BatchPointsConfig{
-		Precision: "s",
-		Database:  "quotes",
-	})
+func (s InfluxDB) creteCompanyDailQuotePoints(exchange exchanges.Exchange, date time.Time, cdq *quotes.CompanyDailyQuote) []*client.Point {
+	points := make([]*client.Point, 0, len(*cdq.Pre)+len(*cdq.Regular)+len(*cdq.Post)+5)
 
 	tags := map[string]string{
 		"exchange": exchange.Code(),
@@ -167,7 +174,7 @@ func (s InfluxDB) saveCompanyDailQuote(exchange exchanges.Exchange, date time.Ti
 		"low":    rollup.Low,
 		"volume": int64(rollup.Volume),
 	}, date)
-	bp.AddPoint(rollupPoint)
+	points = append(points, rollupPoint)
 
 	if cdq.Dividend != nil {
 		dividend, _ := client.NewPoint(dividendMeasurementName, tags, map[string]interface{}{
@@ -175,7 +182,7 @@ func (s InfluxDB) saveCompanyDailQuote(exchange exchanges.Exchange, date time.Ti
 			"amount":    cdq.Dividend.Amount,
 			"timestamp": int64(cdq.Dividend.Timestamp),
 		}, date)
-		bp.AddPoint(dividend)
+		points = append(points, dividend)
 	}
 
 	if cdq.Split != nil && cdq.Split.Enable {
@@ -185,24 +192,14 @@ func (s InfluxDB) saveCompanyDailQuote(exchange exchanges.Exchange, date time.Ti
 			"denominator": cdq.Split.Denominator,
 			"timestamp":   int64(cdq.Split.Timestamp),
 		}, date)
-		bp.AddPoint(split)
+		points = append(points, split)
 	}
 
-	bp.AddPoints(s.createQuoteSerialPoints(cdq.Pre, quotes.SerialTypePre, tags))
-	bp.AddPoints(s.createQuoteSerialPoints(cdq.Regular, quotes.SerialTypeRegular, tags))
-	bp.AddPoints(s.createQuoteSerialPoints(cdq.Post, quotes.SerialTypePost, tags))
+	points = append(points, s.createQuoteSerialPoints(cdq.Pre, quotes.SerialTypePre, tags)...)
+	points = append(points, s.createQuoteSerialPoints(cdq.Regular, quotes.SerialTypeRegular, tags)...)
+	points = append(points, s.createQuoteSerialPoints(cdq.Post, quotes.SerialTypePost, tags)...)
 
-	err := s.client.Write(bp)
-	if err != nil {
-		zap.L().Error("save quotes batch points failed",
-			zap.Error(err),
-			zap.String("exchange", exchange.Code()),
-			zap.String("company", cdq.Company.Code),
-			zap.Time("date", date))
-		return err
-	}
-
-	return nil
+	return points
 }
 
 func (s InfluxDB) createQuoteSerialPoints(serial *quotes.Serial, st quotes.SerialType, tags map[string]string) []*client.Point {
