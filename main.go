@@ -8,7 +8,6 @@ import (
 
 	"github.com/nzai/qr/config"
 	"github.com/nzai/qr/exchanges"
-	"github.com/nzai/qr/notifiers"
 	"github.com/nzai/qr/schedulers"
 	"github.com/nzai/qr/stores"
 	"github.com/nzai/qr/utils"
@@ -56,12 +55,12 @@ func main() {
 	}
 	defer store.Close()
 
-	notifier := notifiers.NewNsq(conf.Nsq.Broker, conf.Nsq.TLSCert, conf.Nsq.TLSKey, conf.Nsq.Topic)
-	defer notifier.Close()
+	// notifier := notifiers.NewNsq(conf.Nsq.Broker, conf.Nsq.TLSCert, conf.Nsq.TLSKey, conf.Nsq.Topic)
+	// defer notifier.Close()
 
-	zap.L().Info("init nsq notifier success",
-		zap.String("broker", conf.Nsq.Broker),
-		zap.String("topic", conf.Nsq.Topic))
+	// zap.L().Info("init nsq notifier success",
+	// 	zap.String("broker", conf.Nsq.Broker),
+	// 	zap.String("topic", conf.Nsq.Topic))
 
 	_exchanges, err := exchanges.Parse(conf.Exchanges)
 	if err != nil {
@@ -70,7 +69,7 @@ func main() {
 			zap.String("arg", conf.Exchanges))
 	}
 
-	scheduler := schedulers.NewScheduler(store, notifier, _exchanges...)
+	scheduler := schedulers.NewScheduler(store, _exchanges...)
 	wg := scheduler.Run(startDate)
 	wg.Wait()
 }

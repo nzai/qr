@@ -43,9 +43,9 @@ func (s Szse) Location() *time.Location {
 // Companies get exchange companies
 func (s Szse) Companies() (map[string]*quotes.Company, error) {
 	urls := map[string][]int{
-		"http://www.szse.cn/api/report/ShowReport?SHOWTYPE=xlsx&CATALOGID=1110&TABKEY=tab1&random=0.49987789273726513": []int{5},
-		"http://www.szse.cn/api/report/ShowReport?SHOWTYPE=xlsx&CATALOGID=1110&TABKEY=tab2&random=0.42963499040546527": []int{10},
-		"http://www.szse.cn/api/report/ShowReport?SHOWTYPE=xlsx&CATALOGID=1110&TABKEY=tab3&random=0.9988466864844461":  []int{5, 10},
+		"http://www.szse.cn/api/report/ShowReport?SHOWTYPE=xlsx&CATALOGID=1110&TABKEY=tab1&random=0.49987789273726513": []int{4},
+		"http://www.szse.cn/api/report/ShowReport?SHOWTYPE=xlsx&CATALOGID=1110&TABKEY=tab2&random=0.42963499040546527": []int{9},
+		"http://www.szse.cn/api/report/ShowReport?SHOWTYPE=xlsx&CATALOGID=1110&TABKEY=tab3&random=0.9988466864844461":  []int{4, 9},
 	}
 
 	companies := make(map[string]*quotes.Company)
