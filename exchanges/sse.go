@@ -47,13 +47,16 @@ func (s Sse) Companies() (map[string]*quotes.Company, error) {
 		"http://query.sse.com.cn/security/stock/downloadStockListFile.do?csrcCode=&stockCode=&areaName=&stockType=1",
 		"http://query.sse.com.cn/security/stock/downloadStockListFile.do?csrcCode=&stockCode=&areaName=&stockType=2",
 	}
-	referer := "http://www.sse.com.cn/assortment/stock/list/share/"
+
+	headers := map[string]string{
+		"Referer": "http://www.sse.com.cn/assortment/stock/list/share/",
+	}
 
 	result := make(map[string]*quotes.Company)
 	for _, url := range urls {
 
 		// download html from sse
-		text, err := utils.TryDownloadStringReferer(url, referer, constants.RetryCount, constants.RetryInterval)
+		text, err := utils.TryDownloadStringWithHeader(url, headers, constants.RetryCount, constants.RetryInterval)
 		if err != nil {
 			zap.L().Error("download sse companies failed", zap.Error(err), zap.String("url", url))
 			return nil, err

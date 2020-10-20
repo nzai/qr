@@ -47,8 +47,12 @@ func (s eodSymbol) Companies(urls ...string) (map[string]*quotes.Company, error)
 }
 
 func (s eodSymbol) getPageCompanies(url string) ([]*quotes.Company, error) {
+	headers := map[string]string{
+		"Cookie": "AspxAutoDetectCookieSupport=1; ASP.NET_SessionId=ezjm323u0i12pog1htbhrcxj",
+	}
+
 	// download csv from nasdaq
-	html, err := utils.TryDownloadString(url, constants.RetryCount, constants.RetryInterval)
+	html, err := utils.TryDownloadStringWithHeader(url, headers, constants.RetryCount, constants.RetryInterval)
 	if err != nil {
 		zap.L().Error("download eoddata company symbol list failed", zap.Error(err), zap.String("url", url))
 		return nil, err
