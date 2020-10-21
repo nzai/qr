@@ -12,14 +12,15 @@ type EMA struct {
 }
 
 type EMAIndex struct {
-	Peroid int
+	n     int
+	round bool
 }
 
-func NewEMAIndex(peroid int) *EMAIndex {
-	return &EMAIndex{Peroid: peroid}
+func NewEMAIndex(n int, round bool) *EMAIndex {
+	return &EMAIndex{n: n, round: round}
 }
 
-func (s *EMAIndex) Calculate(qs []*quotes.Quote) ([]*EMA, error) {
+func (s EMAIndex) Calculate(qs []*quotes.Quote) ([]*EMA, error) {
 	if len(qs) == 0 {
 		return []*EMA{}, nil
 	}
@@ -30,9 +31,12 @@ func (s *EMAIndex) Calculate(qs []*quotes.Quote) ([]*EMA, error) {
 		if index == 0 {
 			value = q.Close
 		} else {
-			value = (q.Close*2 + float32(s.Peroid-1)*emas[index-1].Value) / float32(s.Peroid+1)
-			// match round
-			value = float32(math.Round(float64(value)*100) / 100)
+			value = (q.Close*2 + float32(s.n-1)*emas[index-1].Value) / float32(s.n+1)
+
+			if s.round {
+				// round 2
+				value = float32(math.Round(float64(value)*100) / 100)
+			}
 		}
 
 		emas = append(emas, &EMA{

@@ -1,7 +1,6 @@
 package indexes
 
 import (
-	"math"
 	"testing"
 
 	"github.com/nzai/qr/quotes"
@@ -21,7 +20,7 @@ func TestEMAIndex_Calculate(t *testing.T) {
 		{Timestamp: 10, Close: 109.46},
 	}
 
-	want := []*EMA{
+	ema3 := []*EMA{
 		{Timestamp: 1, Value: 97.04},
 		{Timestamp: 2, Value: 94.84},
 		{Timestamp: 3, Value: 93.63},
@@ -34,25 +33,29 @@ func TestEMAIndex_Calculate(t *testing.T) {
 		{Timestamp: 10, Value: 107.06},
 	}
 
-	emai := NewEMAIndex(3)
+	emai := NewEMAIndex(3, false)
 	emas, err := emai.Calculate(qs)
 	if err != nil {
 		t.Errorf("EMAIndex.Calculate() error = %v", err)
 		return
 	}
 
-	if len(emas) != len(want) {
-		t.Errorf("emas length mismatch, got %d, want %d", len(emas), len(want))
+	if len(emas) != len(ema3) {
+		t.Errorf("emas length mismatch, got %d, want %d", len(emas), len(ema3))
 		return
 	}
 
 	for index, ema := range emas {
-		if ema.Timestamp != want[index].Timestamp {
-			t.Errorf("emas[%d] timestamp not equal, got %d, want %d", ema.Timestamp, ema.Timestamp, want[index].Timestamp)
+		if ema.Timestamp != ema3[index].Timestamp {
+			t.Errorf("emas[%d] timestamp not equal, got %d, want %d", ema.Timestamp, ema.Timestamp, ema3[index].Timestamp)
 		}
 
-		if math.Abs(float64(ema.Value-want[index].Value)) >= 0.01 {
-			t.Errorf("emas[%d] value not equal, got %f, want %f", ema.Timestamp, ema.Value, want[index].Value)
+		// if math.Abs(float64(ema3[index].Value-ema.Value)) >= 0.01 {
+		// 	t.Errorf("emas[%d] value not equal, got %f, want %f", ema.Timestamp, ema.Value, ema3[index].Value)
+		// }
+
+		if ema3[index].Value != ema.Value {
+			t.Errorf("emas[%d] value not equal, got %f, want %f, diff %f", ema.Timestamp, ema.Value, ema3[index].Value, ema.Value-ema3[index].Value)
 		}
 	}
 }
