@@ -66,7 +66,7 @@ func tryDownloadBytesOnce(url string, headers map[string]string) (int, []byte, e
 
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		zap.L().Warn("do http request failed", zap.Error(err), zap.String("url", url))
+		// zap.L().Warn("do http request failed", zap.Error(err), zap.String("url", url))
 		return 0, nil, err
 	}
 	defer response.Body.Close()

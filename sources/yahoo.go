@@ -30,7 +30,7 @@ func (yahoo YahooFinance) Crawl(company *quotes.Company, date time.Time, suffix 
 	// query quote date from yahoo api
 	code, buffer, err := utils.TryDownloadBytes(url, constants.RetryCount, constants.RetryInterval)
 	if err != nil {
-		zap.L().Warn("download yahoo finance quote failed", zap.Error(err), zap.String("url", url))
+		// zap.L().Warn("download yahoo finance quote failed", zap.Error(err), zap.String("url", url))
 		return nil, err
 	}
 
