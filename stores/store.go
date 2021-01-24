@@ -84,6 +84,13 @@ func Parse(arg string) (Store, error) {
 			Region:          parts[3],
 			Bucket:          parts[4],
 		}), nil
+	case "tdengine":
+		if len(parts) < 2 {
+			zap.L().Error("store arg invalid", zap.String("arg", arg))
+			return nil, fmt.Errorf("store arg invalid: %s", arg)
+		}
+
+		return NewTDEngine(parts[1])
 	default:
 		zap.L().Error("store type invalid", zap.String("type", parts[0]))
 		return nil, fmt.Errorf("store type invalid: %s", parts[0])

@@ -136,7 +136,7 @@ func (q ExchangeDailyQuote) Equal(s ExchangeDailyQuote) error {
 	}
 
 	if len(q.Companies) != len(s.Companies) {
-		return fmt.Errorf("companis count %d is not equal from %d", len(q.Companies), len(s.Companies))
+		return fmt.Errorf("companies count %d is not equal from %d", len(q.Companies), len(s.Companies))
 	}
 
 	for companyCode, company := range q.Companies {

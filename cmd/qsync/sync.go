@@ -39,7 +39,6 @@ func (s Sync) Run() *sync.WaitGroup {
 				zap.L().Error("sync exchange daily quote failed",
 					zap.Error(err),
 					zap.String("exchange", exchange.Code()))
-
 			} else {
 				zap.L().Info("sync exchange daily quote finished",
 					zap.String("exchange", exchange.Code()))
