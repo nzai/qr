@@ -14,8 +14,7 @@ import (
 )
 
 const (
-	tdeDriverName       = "taosSql"
-	flagTypeRaw1mPrefix = "raw_1m_done_"
+	tdeDriverName = "taosSql"
 )
 
 // TDEngine tdengine store
@@ -112,10 +111,10 @@ func (s TDEngine) ensureExchangeTables(exchange exchanges.Exchange) error {
 	commands := []string{
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s USING flags TAGS ("%s", "raw_1m_done");`,
 			s.exchangeDoneTableName(exchange),
-			strings.ToLower(exchange.Code())),
+			exchange.Code()),
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s USING symbols TAGS ("%s", "company");`,
 			s.exchangeCompaniesTableName(exchange),
-			strings.ToLower(exchange.Code())),
+			exchange.Code()),
 	}
 
 	for _, command := range commands {
@@ -136,27 +135,27 @@ func (s TDEngine) ensureCompanyTables(exchange exchanges.Exchange, company *quot
 	commands := []string{
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s USING quotes TAGS ("%s", "%s", "raw_1m_%s");`,
 			s.companySerialTableName(exchange, company, quotes.SerialTypePre),
-			strings.ToLower(exchange.Code()),
-			strings.ToLower(company.Code),
-			strings.ToLower(quotes.SerialTypePre.String())),
+			exchange.Code(),
+			company.Code,
+			quotes.SerialTypePre.String()),
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s USING quotes TAGS ("%s", "%s", "raw_1m_%s");`,
 			s.companySerialTableName(exchange, company, quotes.SerialTypeRegular),
-			strings.ToLower(exchange.Code()),
-			strings.ToLower(company.Code),
-			strings.ToLower(quotes.SerialTypeRegular.String())),
+			exchange.Code(),
+			company.Code,
+			quotes.SerialTypeRegular.String()),
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s USING quotes TAGS ("%s", "%s", "raw_1m_%s");`,
 			s.companySerialTableName(exchange, company, quotes.SerialTypePost),
-			strings.ToLower(exchange.Code()),
-			strings.ToLower(company.Code),
-			strings.ToLower(quotes.SerialTypePost.String())),
+			exchange.Code(),
+			company.Code,
+			quotes.SerialTypePost.String()),
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s USING dividends TAGS ("%s", "%s");`,
 			s.companyDividendTableName(exchange, company),
-			strings.ToLower(exchange.Code()),
-			strings.ToLower(company.Code)),
+			exchange.Code(),
+			company.Code),
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s USING splits TAGS ("%s", "%s");`,
 			s.companySplitTableName(exchange, company),
-			strings.ToLower(exchange.Code()),
-			strings.ToLower(company.Code)),
+			exchange.Code(),
+			company.Code),
 	}
 
 	for _, command := range commands {
