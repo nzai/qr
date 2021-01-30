@@ -17,3 +17,4 @@ log.txt
 *.sh
 *.sql
 *.log
+cmd/cli/cli
