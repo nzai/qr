@@ -179,6 +179,10 @@ func (s rollup) ensureTables() error {
 	}
 
 	for _, exchange := range s.exchanges {
+		commands = append(commands, fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s USING flags TAGS ("%s", "raw_1d_done");`,
+			s.exchangeDoneTableName(exchange.Code()),
+			exchange.Code()))
+
 		commands = append(commands, fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s USING symbols TAGS ("%s", "company");`,
 			s.exchangeCompaniesTableName(exchange.Code()),
 			exchange.Code()))
@@ -208,18 +212,10 @@ func (s rollup) readLoop() {
 			zap.Int("totalDays", totalDays))
 
 		for startDate.Before(date) {
-			zap.L().Info("read source",
-				zap.String("exchange", exchange.Code()),
-				zap.Time("date", date))
-
 			start := time.Now()
 			for index := 1; index <= s.retryTimes; index++ {
 				err := s.tryReadSourceOnce(exchange, date)
 				if err == nil {
-					zap.L().Info("read source success",
-						zap.String("exchange", exchange.Code()),
-						zap.Time("date", date),
-						zap.Duration("duration", time.Since(start)))
 					break
 				}
 
@@ -245,7 +241,16 @@ func (s rollup) readLoop() {
 }
 
 func (s rollup) tryReadSourceOnce(exchange exchanges.Exchange, date time.Time) error {
-	exists, err := s.sourceStore.Exists(exchange, date)
+	exists, err := s.destExists(exchange, date)
+	if err != nil {
+		return err
+	}
+
+	if exists {
+		return nil
+	}
+
+	exists, err = s.sourceStore.Exists(exchange, date)
 	if err != nil {
 		return err
 	}
@@ -257,14 +262,49 @@ func (s rollup) tryReadSourceOnce(exchange exchanges.Exchange, date time.Time) e
 		return nil
 	}
 
+	zap.L().Info("read source",
+		zap.String("exchange", exchange.Code()),
+		zap.Time("date", date))
+
 	edq, err := s.sourceStore.Load(exchange, date)
 	if err != nil {
 		return err
 	}
 
+	zap.L().Info("read source success",
+		zap.String("exchange", exchange.Code()),
+		zap.Time("date", date))
+
 	s.in <- edq
 
 	return nil
+}
+
+// destExists check quote exists
+func (s rollup) destExists(exchange exchanges.Exchange, date time.Time) (bool, error) {
+	command := fmt.Sprintf("select flag from %s where ts=%d", s.exchangeDoneTableName(exchange.Code()), date.Unix()*1000)
+
+	row := s.db.QueryRow(command)
+	var flag int64
+	err := row.Scan(&flag)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+
+	if err != nil {
+		if err.Error() == "Table does not exist" {
+			return false, nil
+		}
+
+		zap.L().Error("query exists failed",
+			zap.Error(err),
+			zap.String("command", command),
+			zap.String("exchange", exchange.Code()),
+			zap.Time("date", date))
+		return false, err
+	}
+
+	return flag > 0, nil
 }
 
 func (s rollup) process() error {
@@ -296,7 +336,13 @@ func (s rollup) process() error {
 			}
 		}
 
-		zap.L().Info("proccess success",
+		command := fmt.Sprintf("insert into %s values(%d, %d)", s.exchangeDoneTableName(edq.Exchange), edq.Date.Unix()*1000, 1)
+		err := s.tryExecuteCommand(command)
+		if err != nil {
+			return err
+		}
+
+		zap.L().Info("exchange proccess success",
 			zap.String("exchange", edq.Exchange),
 			zap.Time("date", edq.Date))
 
@@ -372,6 +418,10 @@ func (s rollup) ensureCompanyTable(cq *companyQuote) error {
 
 	s.companyTableCreated[key] = true
 	return nil
+}
+
+func (s rollup) exchangeDoneTableName(exchange string) string {
+	return fmt.Sprintf("%s_raw_1d_done", strings.ToLower(exchange))
 }
 
 func (s rollup) exchangeCompaniesTableName(exchange string) string {
