@@ -18,3 +18,5 @@ log.txt
 *.sql
 *.log
 cmd/cli/cli
+cmd/chart/chart
+cmd/indicator/indicator
