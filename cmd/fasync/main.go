@@ -83,6 +83,7 @@ func loader(source, dest stores.Store, _exchanges []exchanges.Exchange, ch chan 
 			}
 
 			if exists {
+				date = date.AddDate(0, 0, 1)
 				continue
 			}
 
