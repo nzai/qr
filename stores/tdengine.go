@@ -164,7 +164,7 @@ func (s TDEngine) saveCompanies(exchange exchanges.Exchange, date time.Time, com
 				exchange.Code())
 		}
 
-		fmt.Fprintf(sb, "(%d, '%s', '%s') ", ts, company.Code, company.Name)
+		fmt.Fprintf(sb, "(%d, '%s', \"%s\") ", ts, company.Code, company.Name)
 
 		index++
 
@@ -185,11 +185,13 @@ func (s TDEngine) saveCompanies(exchange exchanges.Exchange, date time.Time, com
 }
 
 func (s TDEngine) saveQuotes(exchange exchanges.Exchange, date time.Time, edq *quotes.ExchangeDailyQuote) error {
-	ch := make(chan struct{}, 4)
+	if len(edq.Companies) == 0 {
+		return nil
+	}
+	ch := make(chan struct{}, 16)
 	defer close(ch)
 
 	wg := new(sync.WaitGroup)
-	wg.Add(len(edq.Companies))
 
 	var err error
 	for _, company := range edq.Companies {
@@ -198,6 +200,7 @@ func (s TDEngine) saveQuotes(exchange exchanges.Exchange, date time.Time, edq *q
 			continue
 		}
 
+		wg.Add(1)
 		go func(_company *quotes.Company) {
 			err = s.saveCompanyQuotes(exchange, _company, date, cdq)
 			if err != nil {

@@ -53,7 +53,7 @@ func main() {
 	zap.L().Info("sync start")
 	defer zap.L().Info("sync end")
 
-	ch := make(chan *EDQ, 8)
+	ch := make(chan *EDQ, 4)
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
 
@@ -127,7 +127,7 @@ func saver(dest stores.Store, ch chan *EDQ) {
 	for edq := range ch {
 		err = dest.Save(edq.Exchange, edq.Date, edq.Quote)
 		if err != nil {
-			zap.L().Error("load edq failed",
+			zap.L().Error("save edq failed",
 				zap.Error(err),
 				zap.Any("exchange", edq.Exchange.Code()),
 				zap.Any("date", edq.Date.Format("2006-01-02")))
