@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"time"
 
@@ -52,17 +53,19 @@ func main() {
 	zap.L().Info("sync start")
 	defer zap.L().Info("sync end")
 
-	ch := make(chan *EDQ, 16)
+	ch := make(chan *EDQ, 8)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
 
 	go func() {
-		loader(sourceStore, destStore, _exchanges, ch)
-		close(ch)
+		defer close(ch)
+		loader(ctx, sourceStore, destStore, _exchanges, ch)
 	}()
 
 	saver(destStore, ch)
 }
 
-func loader(source, dest stores.Store, _exchanges []exchanges.Exchange, ch chan *EDQ) {
+func loader(ctx context.Context, source, dest stores.Store, _exchanges []exchanges.Exchange, ch chan *EDQ) {
 	for _, exchange := range _exchanges {
 		startTime := time.Now()
 
@@ -104,6 +107,12 @@ func loader(source, dest stores.Store, _exchanges []exchanges.Exchange, ch chan 
 				Exchange: exchange,
 				Date:     date,
 				Quote:    edq,
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			default:
 			}
 
 			date = date.AddDate(0, 0, 1)
