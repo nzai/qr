@@ -107,30 +107,37 @@ func (s FileSystem) Save(exchange exchanges.Exchange, date time.Time, edq *quote
 
 // save exchange daily quote to filePath
 func (s FileSystem) save(filePath string, edq *quotes.ExchangeDailyQuote) error {
-
-	file, err := os.Create(filePath)
-	if err != nil {
-		zap.L().Error("load quote failed", zap.Error(err), zap.String("pth", filePath))
-		return err
-	}
-	defer file.Close()
+	buffer := new(bytes.Buffer)
 
 	// init gzip writer
-	gw, err := gzip.NewWriterLevel(file, gzip.BestCompression)
+	gw, err := gzip.NewWriterLevel(buffer, gzip.BestCompression)
 	if err != nil {
-		zap.L().Error("create gzip writer failed", zap.Error(err), zap.String("pth", filePath))
+		zap.L().Error("create gzip writer failed", zap.Error(err), zap.String("filePath", filePath))
 		return err
 	}
 
 	// encode to gzip writer
 	err = edq.Encode(gw)
 	if err != nil {
-		zap.L().Error("encode quote failed", zap.Error(err), zap.String("pth", filePath))
+		zap.L().Error("encode quote failed", zap.Error(err), zap.String("filePath", filePath))
 		return err
 	}
 
 	gw.Flush()
 	gw.Close()
+
+	file, err := os.Create(filePath)
+	if err != nil {
+		zap.L().Error("load quote failed", zap.Error(err), zap.String("filePath", filePath))
+		return err
+	}
+	defer file.Close()
+
+	_, err = io.Copy(file, buffer)
+	if err != nil {
+		zap.L().Error("copy buffer failed", zap.Error(err), zap.String("filePath", filePath))
+		return err
+	}
 
 	return nil
 }

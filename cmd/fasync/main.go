@@ -53,7 +53,7 @@ func main() {
 	zap.L().Info("sync start")
 	defer zap.L().Info("sync end")
 
-	ch := make(chan *EDQ, 4)
+	ch := make(chan *EDQ, 8)
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
 
@@ -78,7 +78,7 @@ func loader(ctx context.Context, source, dest stores.Store, _exchanges []exchang
 		for date.Before(endDate) {
 			exists, err = dest.Exists(exchange, date)
 			if err != nil {
-				zap.L().Error("check edq exists failed",
+				zap.L().Error("check dest exists failed",
 					zap.Error(err),
 					zap.Any("exchange", exchange.Code()),
 					zap.Any("date", date.Format("2006-01-02")))
@@ -86,6 +86,20 @@ func loader(ctx context.Context, source, dest stores.Store, _exchanges []exchang
 			}
 
 			if exists {
+				date = date.AddDate(0, 0, 1)
+				continue
+			}
+
+			exists, err = source.Exists(exchange, date)
+			if err != nil {
+				zap.L().Error("check source exists failed",
+					zap.Error(err),
+					zap.Any("exchange", exchange.Code()),
+					zap.Any("date", date.Format("2006-01-02")))
+				return
+			}
+
+			if !exists {
 				date = date.AddDate(0, 0, 1)
 				continue
 			}
