@@ -3,13 +3,14 @@ package stores
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"database/sql"
 
 	"github.com/nzai/qr/exchanges"
 	"github.com/nzai/qr/quotes"
-	_ "github.com/taosdata/driver-go/taosSql"
+	_ "github.com/taosdata/driver-go/v2/taosSql"
 	"go.uber.org/zap"
 )
 
@@ -48,7 +49,7 @@ func NewTDEngine(address string) (*TDEngine, error) {
 
 	err = tde.ensureTables()
 	if err != nil {
-		zap.L().Error("ensure tables failed", zap.Error(err))
+		zap.L().Error("ensure tables failed", zap.Error(err), zap.String("address", address))
 		return nil, err
 	}
 
@@ -66,17 +67,17 @@ func (s TDEngine) Close() error {
 
 func (s TDEngine) ensureTables() error {
 	commands := []string{
-		"CREATE TABLE IF NOT EXISTS quotes (ts timestamp, open float, close float, high float, low float, volume bigint) TAGS (exchange binary(32), company binary(32), type binary(16))",
-		"CREATE TABLE IF NOT EXISTS symbols (ts timestamp, symbol binary(32), name nchar(256)) TAGS (exchange binary(32), type binary(64))",
-		"CREATE TABLE IF NOT EXISTS flags (ts timestamp, flag bigint) TAGS (exchange binary(32), type binary(64))",
-		"CREATE TABLE IF NOT EXISTS dividends (ts timestamp, amount float) TAGS (exchange binary(32), company binary(32))",
-		"CREATE TABLE IF NOT EXISTS splits (ts timestamp, numerator float, denominator float) TAGS (exchange binary(32), company binary(32))",
+		"create stable if not exists tasks (ts timestamp, done bool) tags (exchange nchar(50), type nchar(100))",
+		"create stable if not exists quotes (ts timestamp, open float, close float, high float, low float, volume bigint) tags (exchange nchar(50), symbol nchar(100), type nchar(100))",
+		"create stable if not exists symbols (ts timestamp, symbol nchar(50), name nchar(200)) tags (exchange nchar(50), type nchar(100))",
+		"create stable if not exists dividends (ts timestamp, amount float) tags (exchange nchar(50), symbol nchar(100))",
+		"create stable if not exists splits (ts timestamp, numerator float, denominator float) tags (exchange nchar(50), symbol nchar(100))",
 	}
 
 	for _, command := range commands {
 		_, err := s.db.Exec(command)
 		if err != nil {
-			zap.L().Error("ensure table failed", zap.Error(err), zap.String("command", command))
+			zap.L().Error("ensure stable failed", zap.Error(err), zap.String("command", command))
 			return err
 		}
 	}
@@ -85,11 +86,11 @@ func (s TDEngine) ensureTables() error {
 }
 
 func (s TDEngine) exchangeDoneTableName(exchange exchanges.Exchange) string {
-	return fmt.Sprintf("%s_raw_1m_done", strings.ToLower(exchange.Code()))
+	return fmt.Sprintf("%s_raw_1m_task", strings.ToLower(exchange.Code()))
 }
 
 func (s TDEngine) exchangeCompaniesTableName(exchange exchanges.Exchange) string {
-	return fmt.Sprintf("%s_company", strings.ToLower(exchange.Code()))
+	return fmt.Sprintf("%s_companies", strings.ToLower(exchange.Code()))
 }
 
 func (s TDEngine) companySerialTableName(exchange exchanges.Exchange, company *quotes.Company, serialType quotes.SerialType) string {
@@ -107,87 +108,20 @@ func (s TDEngine) companySplitTableName(exchange exchanges.Exchange, company *qu
 	return fmt.Sprintf("%s_%s_split", strings.ToLower(exchange.Code()), strings.ToLower(company.Code))
 }
 
-func (s TDEngine) ensureExchangeTables(exchange exchanges.Exchange) error {
-	commands := []string{
-		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s USING flags TAGS ("%s", "raw_1m_done");`,
-			s.exchangeDoneTableName(exchange),
-			exchange.Code()),
-		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s USING symbols TAGS ("%s", "company");`,
-			s.exchangeCompaniesTableName(exchange),
-			exchange.Code()),
-	}
-
-	for _, command := range commands {
-		_, err := s.db.Exec(command)
-		if err != nil {
-			zap.L().Error("ensure exchange table failed",
-				zap.Error(err),
-				zap.String("exchange", exchange.Code()),
-				zap.String("command", command))
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (s TDEngine) ensureCompanyTables(exchange exchanges.Exchange, company *quotes.Company) error {
-	commands := []string{
-		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s USING quotes TAGS ("%s", "%s", "raw_1m_%s");`,
-			s.companySerialTableName(exchange, company, quotes.SerialTypePre),
-			exchange.Code(),
-			company.Code,
-			quotes.SerialTypePre.String()),
-		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s USING quotes TAGS ("%s", "%s", "raw_1m_%s");`,
-			s.companySerialTableName(exchange, company, quotes.SerialTypeRegular),
-			exchange.Code(),
-			company.Code,
-			quotes.SerialTypeRegular.String()),
-		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s USING quotes TAGS ("%s", "%s", "raw_1m_%s");`,
-			s.companySerialTableName(exchange, company, quotes.SerialTypePost),
-			exchange.Code(),
-			company.Code,
-			quotes.SerialTypePost.String()),
-		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s USING dividends TAGS ("%s", "%s");`,
-			s.companyDividendTableName(exchange, company),
-			exchange.Code(),
-			company.Code),
-		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s USING splits TAGS ("%s", "%s");`,
-			s.companySplitTableName(exchange, company),
-			exchange.Code(),
-			company.Code),
-	}
-
-	for _, command := range commands {
-		_, err := s.db.Exec(command)
-		if err != nil {
-			zap.L().Error("ensure company table failed",
-				zap.Error(err),
-				zap.String("exchange", exchange.Code()),
-				zap.String("company", company.Code),
-				zap.String("command", command))
-			return err
-		}
-	}
-
-	return nil
-}
-
 // Exists check quote exists
 func (s TDEngine) Exists(exchange exchanges.Exchange, date time.Time) (bool, error) {
-	command := fmt.Sprintf("select flag from %s where ts=%d", s.exchangeDoneTableName(exchange), date.Unix()*1000)
+	command := fmt.Sprintf("select done from tasks where exchange='%s' and type='raw_1m' and ts=%d",
+		exchange.Code(),
+		date.Unix()*1000)
+
+	var done bool
 	row := s.db.QueryRow(command)
-	var flag int64
-	err := row.Scan(&flag)
+	err := row.Scan(&done)
 	if err == sql.ErrNoRows {
 		return false, nil
 	}
 
 	if err != nil {
-		if err.Error() == "Table does not exist" {
-			return false, nil
-		}
-
 		zap.L().Error("query exists failed",
 			zap.Error(err),
 			zap.String("command", command),
@@ -196,17 +130,12 @@ func (s TDEngine) Exists(exchange exchanges.Exchange, date time.Time) (bool, err
 		return false, err
 	}
 
-	return flag > 0, nil
+	return done, nil
 }
 
 // Save save exchange daily quote
 func (s TDEngine) Save(exchange exchanges.Exchange, date time.Time, edq *quotes.ExchangeDailyQuote) error {
-	err := s.ensureExchangeTables(exchange)
-	if err != nil {
-		return err
-	}
-
-	err = s.saveCompanies(exchange, date, edq.Companies)
+	err := s.saveCompanies(exchange, date, edq.Companies)
 	if err != nil {
 		return err
 	}
@@ -230,12 +159,13 @@ func (s TDEngine) saveCompanies(exchange exchanges.Exchange, date time.Time, com
 	for _, company := range companies {
 		if index%100 == 0 {
 			sb.Reset()
-			fmt.Fprintf(sb, "insert into %s values", s.exchangeCompaniesTableName(exchange))
+			fmt.Fprintf(sb, "insert into %s using symbols tags('%s', 'company') values ",
+				s.exchangeCompaniesTableName(exchange),
+				exchange.Code())
 		}
 
-		fmt.Fprintf(sb, "(%d, '%s', '%s')", ts, company.Code, company.Name)
+		fmt.Fprintf(sb, "(%d, '%s', '%s') ", ts, company.Code, company.Name)
 
-		ts++
 		index++
 
 		if index%100 == 0 || index == len(companies) {
@@ -246,6 +176,7 @@ func (s TDEngine) saveCompanies(exchange exchanges.Exchange, date time.Time, com
 					zap.String("exchange", exchange.Code()),
 					zap.Time("date", date),
 					zap.String("sql", sb.String()))
+				return err
 			}
 		}
 	}
@@ -254,6 +185,12 @@ func (s TDEngine) saveCompanies(exchange exchanges.Exchange, date time.Time, com
 }
 
 func (s TDEngine) saveQuotes(exchange exchanges.Exchange, date time.Time, edq *quotes.ExchangeDailyQuote) error {
+	ch := make(chan struct{}, 4)
+	defer close(ch)
+
+	wg := new(sync.WaitGroup)
+	wg.Add(len(edq.Companies))
+
 	var err error
 	for _, company := range edq.Companies {
 		cdq, found := edq.Quotes[company.Code]
@@ -261,22 +198,29 @@ func (s TDEngine) saveQuotes(exchange exchanges.Exchange, date time.Time, edq *q
 			continue
 		}
 
-		err = s.saveCompanyQuotes(exchange, company, date, cdq)
-		if err != nil {
-			return err
-		}
+		go func(_company *quotes.Company) {
+			err = s.saveCompanyQuotes(exchange, _company, date, cdq)
+			if err != nil {
+				zap.L().Fatal("save company quotes failed",
+					zap.Error(err),
+					zap.String("exchange", exchange.Code()),
+					zap.String("company", _company.Code),
+					zap.Time("date", date))
+			}
+
+			<-ch
+			wg.Done()
+		}(company)
+
+		ch <- struct{}{}
 	}
+	wg.Wait()
 
 	return nil
 }
 
 func (s TDEngine) saveCompanyQuotes(exchange exchanges.Exchange, company *quotes.Company, date time.Time, cdq *quotes.CompanyDailyQuote) error {
-	err := s.ensureCompanyTables(exchange, company)
-	if err != nil {
-		return err
-	}
-
-	err = s.saveCompanySerial(exchange, company, quotes.SerialTypePre, cdq.Pre)
+	err := s.saveCompanySerial(exchange, company, quotes.SerialTypePre, cdq.Pre)
 	if err != nil {
 		return err
 	}
@@ -310,10 +254,14 @@ func (s TDEngine) saveCompanySerial(exchange exchanges.Exchange, company *quotes
 	}
 
 	sb := new(strings.Builder)
-	fmt.Fprintf(sb, "insert into %s values", s.companySerialTableName(exchange, company, serialType))
+	fmt.Fprintf(sb, "insert into %s using quotes tags('%s', '%s', '%s') values ",
+		s.companySerialTableName(exchange, company, serialType),
+		exchange.Code(),
+		company.Code,
+		serialType.String())
 
 	for _, quote := range *serial {
-		fmt.Fprintf(sb, "(%d, %f, %f, %f, %f, %d)", quote.Timestamp*1000, quote.Open, quote.Close, quote.High, quote.Low, quote.Volume)
+		fmt.Fprintf(sb, "(%d, %f, %f, %f, %f, %d) ", quote.Timestamp*1000, quote.Open, quote.Close, quote.High, quote.Low, quote.Volume)
 	}
 
 	_, err := s.db.Exec(sb.String())
@@ -323,25 +271,32 @@ func (s TDEngine) saveCompanySerial(exchange exchanges.Exchange, company *quotes
 			zap.String("exchange", exchange.Code()),
 			zap.String("company", company.Code),
 			zap.String("serialType", serialType.String()))
+		return err
 	}
 
 	return nil
 }
 
-func (s TDEngine) saveCompanyDividend(exchange exchanges.Exchange, company *quotes.Company, date time.Time, divide *quotes.Dividend) error {
-	if divide == nil || !divide.Enable {
+func (s TDEngine) saveCompanyDividend(exchange exchanges.Exchange, company *quotes.Company, date time.Time, dividend *quotes.Dividend) error {
+	if dividend == nil || !dividend.Enable {
 		return nil
 	}
 
-	command := fmt.Sprintf("insert into %s values(%d, %f)", s.companyDividendTableName(exchange, company), divide.Timestamp*1000, divide.Amount)
+	command := fmt.Sprintf("insert into %s using dividends tags('%s', '%s') values(%d, %f)",
+		s.companyDividendTableName(exchange, company),
+		exchange.Code(),
+		company.Code,
+		dividend.Timestamp*1000,
+		dividend.Amount)
 	_, err := s.db.Exec(command)
 	if err != nil {
-		zap.L().Error("save company divide failed",
+		zap.L().Error("save company dividend failed",
 			zap.Error(err),
 			zap.String("exchange", exchange.Code()),
 			zap.String("company", company.Code),
 			zap.Time("date", date),
-			zap.Any("divide", divide))
+			zap.Any("dividend", dividend))
+		return err
 	}
 
 	return nil
@@ -352,7 +307,13 @@ func (s TDEngine) saveCompanySplit(exchange exchanges.Exchange, company *quotes.
 		return nil
 	}
 
-	command := fmt.Sprintf("insert into %s values(%d, %f, %f)", s.companySplitTableName(exchange, company), split.Timestamp*1000, split.Numerator, split.Denominator)
+	command := fmt.Sprintf("insert into %s using splits tags('%s', '%s') values(%d, %f, %f)",
+		s.companySplitTableName(exchange, company),
+		exchange.Code(),
+		company.Code,
+		split.Timestamp*1000,
+		split.Numerator,
+		split.Denominator)
 	_, err := s.db.Exec(command)
 	if err != nil {
 		zap.L().Error("save company split failed",
@@ -361,19 +322,25 @@ func (s TDEngine) saveCompanySplit(exchange exchanges.Exchange, company *quotes.
 			zap.String("company", company.Code),
 			zap.Time("date", date),
 			zap.Any("split", split))
+		return err
 	}
 
 	return nil
 }
 
 func (s TDEngine) saveExchangeDone(exchange exchanges.Exchange, date time.Time) error {
-	command := fmt.Sprintf("insert into %s values(%d, %d)", s.exchangeDoneTableName(exchange), date.Unix()*1000, 1)
+	command := fmt.Sprintf("insert into %s using tasks tags('%s', 'raw_1m') values(%d, %d)",
+		s.exchangeDoneTableName(exchange),
+		exchange.Code(),
+		date.Unix()*1000,
+		1)
 	_, err := s.db.Exec(command)
 	if err != nil {
-		zap.L().Error("save company divide failed",
+		zap.L().Error("save exchange task failed",
 			zap.Error(err),
 			zap.String("exchange", exchange.Code()),
 			zap.Time("date", date))
+		return err
 	}
 
 	return nil
@@ -400,10 +367,9 @@ func (s TDEngine) Load(exchange exchanges.Exchange, date time.Time) (*quotes.Exc
 }
 
 func (s TDEngine) loadCompanies(exchange exchanges.Exchange, date time.Time) (map[string]*quotes.Company, error) {
-	command := fmt.Sprintf("select symbol, name from %s where ts>=%d and ts<%d",
-		s.exchangeCompaniesTableName(exchange),
-		date.Unix()*1000,
-		date.Unix()*1000+86400000)
+	command := fmt.Sprintf("select symbol, name from symbols where exchange='%s' and type='company' and ts=%d",
+		exchange.Code(),
+		date.Unix()*1000)
 	rows, err := s.db.Query(command)
 	if err != nil {
 		zap.L().Error("load exchange companies failed",
@@ -492,8 +458,10 @@ func (s TDEngine) loadCompanyQuotes(exchange exchanges.Exchange, date time.Time,
 }
 
 func (s TDEngine) loadCompanySerial(exchange exchanges.Exchange, date time.Time, company *quotes.Company, serialType quotes.SerialType) (*quotes.Serial, error) {
-	command := fmt.Sprintf("select ts, open, close, high, low, volume from %s where ts>=%d and ts<%d order by ts",
-		s.companySerialTableName(exchange, company, serialType),
+	command := fmt.Sprintf("select ts, open, close, high, low, volume from quotes where exchange='%s' and symbol='%s' and type='%s' and ts>=%d and ts<%d order by ts",
+		exchange.Code(),
+		company.Code,
+		serialType.String(),
 		date.Unix()*1000,
 		date.Unix()*1000+86400000)
 	rows, err := s.db.Query(command)
@@ -511,9 +479,9 @@ func (s TDEngine) loadCompanySerial(exchange exchanges.Exchange, date time.Time,
 	var serial quotes.Serial
 	var volume uint64
 	var open, close, high, low float32
-	var timeString string
+	var t time.Time
 	for rows.Next() {
-		err = rows.Scan(&timeString, &open, &close, &high, &low, &volume)
+		err = rows.Scan(&t, &open, &close, &high, &low, &volume)
 		if err != nil {
 			zap.L().Error("scan quote failed",
 				zap.Error(err),
@@ -521,19 +489,6 @@ func (s TDEngine) loadCompanySerial(exchange exchanges.Exchange, date time.Time,
 				zap.String("company", company.Code),
 				zap.Time("date", date),
 				zap.String("serialType", serialType.String()))
-			return nil, err
-		}
-
-		// 2015-05-22 22:30:00.000
-		t, err := time.ParseInLocation("2006-01-02 15:04:05.999", timeString, time.Local)
-		if err != nil {
-			zap.L().Error("parse quote time failed",
-				zap.Error(err),
-				zap.String("exchange", exchange.Code()),
-				zap.String("company", company.Code),
-				zap.Time("date", date),
-				zap.String("serialType", serialType.String()),
-				zap.String("timeString", timeString))
 			return nil, err
 		}
 
@@ -545,7 +500,6 @@ func (s TDEngine) loadCompanySerial(exchange exchanges.Exchange, date time.Time,
 			Low:       low,
 			Volume:    volume,
 		})
-
 	}
 
 	err = rows.Err()
@@ -565,14 +519,15 @@ func (s TDEngine) loadCompanySerial(exchange exchanges.Exchange, date time.Time,
 func (s TDEngine) loadCompanyDividend(exchange exchanges.Exchange, date time.Time, company *quotes.Company) (*quotes.Dividend, error) {
 	dividend := &quotes.Dividend{Enable: false}
 
-	command := fmt.Sprintf("select ts, amount from %s where ts=%d",
-		s.companyDividendTableName(exchange, company),
+	command := fmt.Sprintf("select ts, amount from dividends where exchange='%s' and symbol='%s' and ts=%d",
+		exchange.Code(),
+		company.Code,
 		date.Unix()*1000)
-	row := s.db.QueryRow(command)
 
-	var timeString string
+	var t time.Time
 	var amount float32
-	err := row.Scan(&timeString, &amount)
+	row := s.db.QueryRow(command)
+	err := row.Scan(&t, &amount)
 	if err == sql.ErrNoRows {
 		return dividend, nil
 	}
@@ -586,17 +541,6 @@ func (s TDEngine) loadCompanyDividend(exchange exchanges.Exchange, date time.Tim
 		return nil, err
 	}
 
-	t, err := time.ParseInLocation("2006-01-02 15:04:05.999", timeString, time.Local)
-	if err != nil {
-		zap.L().Error("parse quote time failed",
-			zap.Error(err),
-			zap.String("exchange", exchange.Code()),
-			zap.String("company", company.Code),
-			zap.Time("date", date),
-			zap.String("timeString", timeString))
-		return nil, err
-	}
-
 	dividend.Enable = true
 	dividend.Timestamp = uint64(t.Unix())
 	dividend.Amount = amount
@@ -607,14 +551,15 @@ func (s TDEngine) loadCompanyDividend(exchange exchanges.Exchange, date time.Tim
 func (s TDEngine) loadCompanySplit(exchange exchanges.Exchange, date time.Time, company *quotes.Company) (*quotes.Split, error) {
 	split := &quotes.Split{Enable: false}
 
-	command := fmt.Sprintf("select ts, numerator, denominator from %s where ts=%d",
-		s.companySplitTableName(exchange, company),
+	command := fmt.Sprintf("select ts, numerator, denominator from splits where exchange='%s' and symbol='%s' and ts=%d",
+		exchange.Code(),
+		company.Code,
 		date.Unix()*1000)
-	row := s.db.QueryRow(command)
 
-	var timeString string
+	var t time.Time
 	var numerator, denominator float32
-	err := row.Scan(&timeString, &numerator, &denominator)
+	row := s.db.QueryRow(command)
+	err := row.Scan(&t, &numerator, &denominator)
 	if err == sql.ErrNoRows {
 		return split, nil
 	}
@@ -625,17 +570,6 @@ func (s TDEngine) loadCompanySplit(exchange exchanges.Exchange, date time.Time, 
 			zap.String("exchange", exchange.Code()),
 			zap.String("company", company.Code),
 			zap.Time("date", date))
-		return nil, err
-	}
-
-	t, err := time.ParseInLocation("2006-01-02 15:04:05.999", timeString, time.Local)
-	if err != nil {
-		zap.L().Error("parse quote time failed",
-			zap.Error(err),
-			zap.String("exchange", exchange.Code()),
-			zap.String("company", company.Code),
-			zap.Time("date", date),
-			zap.String("timeString", timeString))
 		return nil, err
 	}
 
