@@ -4,15 +4,22 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/http"
+	"os"
+	"os/exec"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/nzai/qr/cmd/updater/trade_system"
 	"github.com/nzai/qr/quotes"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 )
 
-type Simulate struct{}
+type Simulate struct {
+	qs     []*quotes.Quote
+	result *simulateResult
+}
 
 func (s Simulate) Command() *cli.Command {
 	return &cli.Command{
@@ -34,7 +41,7 @@ func (s Simulate) Command() *cli.Command {
 			&cli.Float64Flag{
 				Name:     "amount",
 				Aliases:  []string{"a"},
-				Value:    100000,
+				Value:    1000000,
 				Required: false,
 			},
 		},
@@ -53,18 +60,22 @@ func (s Simulate) Command() *cli.Command {
 			if err != nil {
 				return err
 			}
+			s.qs = qs
 
 			if len(qs) == 0 {
 				zap.L().Warn("not enough data")
 				return nil
 			}
 
+			s.startGin()
+
 			start := time.Now()
 			var bestResult *simulateResult
 			var bestPeroid int
-			for index := 2; index <= 6000; index++ {
-				result, err := s.simulate(c.Context, amount, qs, trade_system.NewMA(index))
-				// result, err := s.Do(c.Context, amount, qs, trade_system.NewLongHold())
+			for index := 1; index <= 100; index++ {
+				// result, err := s.simulate(c.Context, amount, qs, trade_system.NewLongHold())
+				result, err := s.simulate(c.Context, amount, qs, trade_system.NewMA(index, 2))
+				// result, err := s.simulate(c.Context, amount, qs, trade_system.NewTurtle(index, 2, 0.2))
 				if err != nil {
 					return err
 				}
@@ -90,7 +101,16 @@ func (s Simulate) Command() *cli.Command {
 				bestResult.PriceIncreasedPercent*100,
 				time.Since(start).String())
 
-			return nil
+			s.result = bestResult
+
+			command := exec.CommandContext(c.Context, "xdg-open", "http://127.0.0.1:3000/home/index.htm")
+			command.Stdout = os.Stdout
+			command.Stderr = os.Stderr
+
+			err = command.Run()
+
+			select {}
+			return err
 		},
 	}
 }
@@ -206,7 +226,7 @@ type simulateResult struct {
 	Profit                float64             `json:"profit"`
 	ProfitPercent         float64             `json:"profit_percent"`
 	PriceIncreasedPercent float64             `json:"price_inceased_percent"`
-	SnapShots             []*simulateSnapShot `json:"-"`
+	SnapShots             []*simulateSnapShot `json:"snapshots"`
 }
 
 type simulateSnapShot struct {
@@ -214,4 +234,78 @@ type simulateSnapShot struct {
 	HoldingCast     float64 `json:"holding_cast"`
 	HoldingQuantity uint64  `json:"holding_quantity"`
 	Worth           float64 `json:"worth"`
+}
+
+func (s *Simulate) startGin() {
+	gin.SetMode(gin.ReleaseMode)
+
+	r := gin.New()
+	r.Use(s.logger())
+
+	// r.Static("/home", "./simulate_static")
+	r.StaticFS("/home", http.Dir("simulate_static"))
+	// r.Use(static.Serve("/", static.LocalFile("/simulate_static", false)))
+
+	r.GET("/chart", s.showChart)
+
+	go func() {
+		defer zap.L().Info("gin end")
+
+		err := r.Run(":3000")
+		if err != nil {
+			zap.L().Error("run server failed", zap.Error(err))
+		}
+	}()
+}
+
+func (s *Simulate) showChart(c *gin.Context) {
+	category := make([]string, 0, len(s.qs))
+	quote := make([][]float32, 0, len(s.qs))
+	volume := make([][]int64, 0, len(s.qs))
+
+	var direction int64
+	for index, q := range s.qs {
+		category = append(category, time.Unix(int64(q.Timestamp), 0).Format("2006/01/02"))
+		quote = append(quote, []float32{q.Open, q.Close, q.High, q.Low})
+
+		direction = 1
+		if q.Close > q.Open {
+			direction = -1
+		}
+		volume = append(volume, []int64{int64(index), int64(q.Volume), direction})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"catetory": category,
+		"quote":    quote,
+		"volume":   volume,
+		"result":   s.result,
+	})
+
+}
+
+func (s Simulate) logger() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		requstURL := c.Request.URL.String()
+
+		fields := []zap.Field{
+			zap.String("method", c.Request.Method),
+			zap.String("url", requstURL),
+		}
+
+		zap.L().Info(fmt.Sprintf("[START] %s %s", c.Request.Method, requstURL), fields...)
+
+		// Process request
+		c.Next()
+
+		// add response fields
+		duration := time.Since(start)
+		fields = append(fields,
+			zap.Int("size", c.Writer.Size()),
+			zap.Int("status", c.Writer.Status()),
+			zap.Int64("duration", duration.Milliseconds()))
+
+		zap.L().Info(fmt.Sprintf("[END] %s %s (%d) in %s", c.Request.Method, requstURL, c.Writer.Status(), duration.String()), fields...)
+	}
 }
