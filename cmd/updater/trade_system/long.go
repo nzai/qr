@@ -21,7 +21,7 @@ func (a *LongHold) Next(ctx *Context) error {
 	}
 
 	a.first = false
-	quantity := uint64(ctx.Balance() / float64(ctx.Current.Close))
+	quantity := uint64(ctx.Balance() * 0.995 / float64(ctx.Current.Close))
 	if quantity <= 0 {
 		return nil
 	}

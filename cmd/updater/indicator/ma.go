@@ -1,7 +1,5 @@
 package indicator
 
-import "math"
-
 type MoveAverage struct {
 	peroid    int
 	precision int
@@ -37,21 +35,16 @@ func (ma MoveAverage) Values() []float64 {
 }
 
 func (ma *MoveAverage) Append(value float64) float64 {
-	value = ma.floor(value)
+	value = Floor(value, ma.precision)
 
 	var newValue float64
 	if len(ma.values) == 0 {
 		newValue = value
 	} else {
-		newValue = ma.floor((ma.values[len(ma.values)-1]*float64(ma.peroid-1) + value) / float64(ma.peroid))
+		newValue = Floor((ma.values[len(ma.values)-1]*float64(ma.peroid-1)+value)/float64(ma.peroid), ma.precision)
 	}
 
 	ma.values = append(ma.values, newValue)
 
 	return newValue
-}
-
-func (ma MoveAverage) floor(value float64) float64 {
-	times := math.Pow10(ma.precision)
-	return math.Floor(value*times) / times
 }
