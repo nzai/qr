@@ -41,7 +41,7 @@ func (s Simulate) Command() *cli.Command {
 		Action: func(c *cli.Context) error {
 			tdeAddress := c.String("tde-address")
 			tableName := c.String("tablename")
-			amount := c.Float64("amouont")
+			amount := c.Float64("amount")
 
 			db, err := s.openDB(tdeAddress)
 			if err != nil {
@@ -54,13 +54,41 @@ func (s Simulate) Command() *cli.Command {
 				return err
 			}
 
-			result, err := s.Do(c.Context, amount, qs, nil)
-			if err != nil {
-				return err
+			if len(qs) == 0 {
+				zap.L().Warn("not enough data")
+				return nil
 			}
 
-			fmt.Printf("profile: %.2f\nprofile percent: %.2f%%\nprice increased: %.2f%%\n",
-				result.Profit, result.ProfitPercent, result.PriceIncreasedPercent)
+			start := time.Now()
+			var bestResult *simulateResult
+			var bestPeroid int
+			for index := 2; index <= 6000; index++ {
+				result, err := s.simulate(c.Context, amount, qs, trade_system.NewMA(index))
+				// result, err := s.Do(c.Context, amount, qs, trade_system.NewLongHold())
+				if err != nil {
+					return err
+				}
+
+				if bestResult == nil {
+					bestResult = result
+					bestPeroid = index
+					continue
+				}
+
+				if result.Profit > bestResult.Profit {
+					bestResult = result
+					bestPeroid = index
+					continue
+				}
+			}
+
+			// zap.L().Info("do finished", zap.Any("result", result))
+			fmt.Printf("peroid: %d\nprofile: %.2f\nprofile percent: %.2f%%\nprice increased: %.2f%%\nduration: %s\n",
+				bestPeroid,
+				bestResult.Profit,
+				bestResult.ProfitPercent*100,
+				bestResult.PriceIncreasedPercent*100,
+				time.Since(start).String())
 
 			return nil
 		},
@@ -80,7 +108,7 @@ func (s Simulate) openDB(address string) (*sql.DB, error) {
 		return nil, err
 	}
 
-	zap.L().Info("open database successfully", zap.String("address", address))
+	// zap.L().Debug("open database successfully", zap.String("address", address))
 
 	return db, nil
 }
@@ -130,7 +158,7 @@ func (s Simulate) loadData(ctx context.Context, db *sql.DB, tableName string) ([
 	return qs, nil
 }
 
-func (s Simulate) Do(ctx context.Context, amount float64, qs []*quotes.Quote, system trade_system.TradeSystem) (*simulateResult, error) {
+func (s Simulate) simulate(ctx context.Context, amount float64, qs []*quotes.Quote, system trade_system.TradeSystem) (*simulateResult, error) {
 	err := system.Init(ctx)
 	if err != nil {
 		zap.L().Error("init trade system failed", zap.Error(err))
@@ -154,7 +182,7 @@ func (s Simulate) Do(ctx context.Context, amount float64, qs []*quotes.Quote, sy
 			Balance:         context.Balance(),
 			HoldingCast:     cast,
 			HoldingQuantity: quantity,
-			Worth:           context.Balance() + cast*float64(quantity),
+			Worth:           context.Balance() + float64(context.Current.Close)*float64(quantity),
 		})
 	}
 
@@ -164,6 +192,7 @@ func (s Simulate) Do(ctx context.Context, amount float64, qs []*quotes.Quote, sy
 		return nil, err
 	}
 
+	// zap.L().Info("finished", zap.Any("snapshot", snapShots))
 	worth := snapShots[len(snapShots)-1].Worth
 	return &simulateResult{
 		Profit:                worth - amount,
@@ -174,15 +203,15 @@ func (s Simulate) Do(ctx context.Context, amount float64, qs []*quotes.Quote, sy
 }
 
 type simulateResult struct {
-	Profit                float64
-	ProfitPercent         float64
-	PriceIncreasedPercent float64
-	SnapShots             []*simulateSnapShot
+	Profit                float64             `json:"profit"`
+	ProfitPercent         float64             `json:"profit_percent"`
+	PriceIncreasedPercent float64             `json:"price_inceased_percent"`
+	SnapShots             []*simulateSnapShot `json:"-"`
 }
 
 type simulateSnapShot struct {
-	Balance         float64
-	HoldingCast     float64
-	HoldingQuantity uint64
-	Worth           float64
+	Balance         float64 `json:"balance"`
+	HoldingCast     float64 `json:"holding_cast"`
+	HoldingQuantity uint64  `json:"holding_quantity"`
+	Worth           float64 `json:"worth"`
 }

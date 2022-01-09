@@ -65,8 +65,9 @@ func (c *Context) Buy(price float64, quantity uint64) (*TradeResult, error) {
 
 	buyAmount := price * float64(quantity)
 	holdingAmount := c.holdingCast * float64(c.holdingQuantity)
+	tax := c.buyTax(price, quantity)
 
-	c.balance -= buyAmount
+	c.balance -= buyAmount + tax
 	c.holdingQuantity = c.holdingQuantity + quantity
 	c.holdingCast = (holdingAmount + buyAmount) / float64(c.holdingQuantity)
 
@@ -77,18 +78,22 @@ func (c *Context) Buy(price float64, quantity uint64) (*TradeResult, error) {
 		HoldingQuantity: c.holdingQuantity,
 	}
 
-	zap.L().Info("buy successfully",
-		zap.Float64("price", price),
-		zap.Uint64("quantity", quantity),
-		zap.Float64("banlance", c.balance),
-		zap.Float64("holdingCast", c.holdingCast),
-		zap.Uint64("holdingQuantity", c.holdingQuantity))
+	// zap.L().Debug("buy successfully",
+	// 	zap.Time("time", time.Unix(int64(c.Current.Timestamp), 0)),
+	// 	zap.Float64("price", price),
+	// 	zap.Uint64("quantity", quantity),
+	// 	zap.Float64("banlance", c.balance),
+	// 	zap.Float64("holdingCast", c.holdingCast),
+	// 	zap.Uint64("holdingQuantity", c.holdingQuantity),
+	// 	zap.Float64("tax", tax))
 
 	return result, nil
 }
 
 func (c Context) buyValidate(price float64, quantity uint64) error {
-	if price*float64(quantity) > c.balance {
+	tax := c.buyTax(price, quantity)
+
+	if price*float64(quantity)+tax > c.balance {
 		zap.L().Warn("not enough balance",
 			zap.Float64("price", price),
 			zap.Uint64("quantity", quantity),
@@ -104,7 +109,7 @@ func (c Context) buyValidate(price float64, quantity uint64) error {
 		return ErrPriceOutOfRange
 	}
 
-	if quantity > c.Current.Volume {
+	if quantity <= 0 || quantity > c.Current.Volume {
 		zap.L().Warn("quantity out of range",
 			zap.Uint64("quantity", quantity),
 			zap.Uint64("volume", c.Current.Volume))
@@ -112,6 +117,23 @@ func (c Context) buyValidate(price float64, quantity uint64) error {
 	}
 
 	return nil
+}
+
+func (c Context) buyTax(price float64, quantity uint64) float64 {
+	amount := price * float64(quantity)
+
+	stampTax := float64(0)
+	transferFee := amount * 0.0002
+	if transferFee < 1 {
+		transferFee = 1
+	}
+
+	commission := amount * 0.003
+	if commission < 5 {
+		commission = 5
+	}
+
+	return stampTax + float64(transferFee) + float64(commission)
 }
 
 func (c *Context) Sell(ctx context.Context, price float64, quantity uint64) (*TradeResult, error) {
@@ -126,8 +148,11 @@ func (c *Context) Sell(ctx context.Context, price float64, quantity uint64) (*Tr
 	c.balanceMutex.Lock()
 	defer c.balanceMutex.Unlock()
 
+	tax := c.sellTax(price, quantity)
 	sellAmount := price * float64(quantity)
-	c.balance += sellAmount
+	c.balance += sellAmount - tax
+
+	// profile := (price-c.holdingCast)*float64(quantity) - tax
 
 	c.holdingQuantity -= quantity
 	if c.holdingQuantity == 0 {
@@ -141,18 +166,21 @@ func (c *Context) Sell(ctx context.Context, price float64, quantity uint64) (*Tr
 		HoldingQuantity: c.holdingQuantity,
 	}
 
-	zap.L().Info("sell successfully",
-		zap.Float64("price", price),
-		zap.Uint64("quantity", quantity),
-		zap.Float64("banlance", c.balance),
-		zap.Float64("holdingCast", c.holdingCast),
-		zap.Uint64("holdingQuantity", c.holdingQuantity))
+	// zap.L().Debug("sell successfully",
+	// 	zap.Time("time", time.Unix(int64(c.Current.Timestamp), 0)),
+	// 	zap.Float64("price", price),
+	// 	zap.Uint64("quantity", quantity),
+	// 	zap.Float64("banlance", c.balance),
+	// 	zap.Float64("holdingCast", c.holdingCast),
+	// 	zap.Uint64("holdingQuantity", c.holdingQuantity),
+	// 	zap.Float64("profile", profile),
+	// 	zap.Float64("tax", tax))
 
 	return result, nil
 }
 
 func (c Context) sellValidate(price float64, quantity uint64) error {
-	if quantity > c.holdingQuantity {
+	if quantity <= 0 || quantity > c.holdingQuantity {
 		zap.L().Warn("quantity out of range",
 			zap.Uint64("quantity", quantity),
 			zap.Uint64("holdingQuantity", c.holdingQuantity))
@@ -175,4 +203,21 @@ func (c Context) sellValidate(price float64, quantity uint64) error {
 	}
 
 	return nil
+}
+
+func (c Context) sellTax(price float64, quantity uint64) float64 {
+	amount := price * float64(quantity)
+
+	stampTax := amount * 0.001
+	transferFee := amount * 0.0002
+	if transferFee < 1 {
+		transferFee = 1
+	}
+
+	commission := amount * 0.003
+	if commission < 5 {
+		commission = 5
+	}
+
+	return stampTax + float64(transferFee) + float64(commission)
 }
