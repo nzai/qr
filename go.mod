@@ -12,6 +12,7 @@ require (
 	github.com/go-redis/redis v6.15.6+incompatible
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/go-querystring v1.0.0 // indirect
+	github.com/google/uuid v1.3.0
 	github.com/gopherjs/gopherjs v0.0.0-20180825215210-0210a2f0f73c // indirect
 	github.com/guotie/gogb2312 v0.0.0-20160513031741-a052a05f3e7e
 	github.com/influxdata/influxdb1-client v0.0.0-20191209144304-8bf82d3c094d

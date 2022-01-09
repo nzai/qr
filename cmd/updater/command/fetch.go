@@ -151,7 +151,7 @@ func (f FetchData) fetch(url string) ([]*quotes.Quote, error) {
 
 	result := f.parse(quote)
 
-	zap.L().Info("open database successfully", zap.Int("quotes", len(result)))
+	zap.L().Info("parse quotes successfully", zap.Int("quotes", len(result)))
 
 	return result, nil
 }
@@ -182,6 +182,10 @@ func (f FetchData) parse(q *quotes.YahooQuote) []*quotes.Quote {
 func (f FetchData) dropTable(ctx context.Context, db *sql.DB, tableName string) error {
 	_, err := db.ExecContext(ctx, "drop table "+tableName)
 	if err != nil {
+		if err.Error() == "[0x362] Table does not exist" {
+			return nil
+		}
+
 		zap.L().Error("drop table failed", zap.Error(err), zap.String("tableName", tableName))
 		return err
 	}
@@ -203,14 +207,14 @@ func (f FetchData) save(ctx context.Context, db *sql.DB, tableName, tagExchange,
 	for index, quote := range data {
 		fmt.Fprintf(sb, "(%d, %f, %f, %f, %f, %d) ", quote.Timestamp*1000, quote.Open, quote.Close, quote.High, quote.Low, quote.Volume)
 
-		if (index%batchSize == 0 && index > 0) || index == len(data)-1 {
+		if index%batchSize == batchSize-1 || index == len(data)-1 {
 			_, err = db.ExecContext(ctx, sb.String())
 			if err != nil {
 				zap.L().Error("save quotes failed", zap.Error(err), zap.String("sql", sb.String()))
 				return err
 			}
 
-			zap.L().Info("save result successfully", zap.Int("count", index))
+			zap.L().Info("save result successfully", zap.Int("count", index+1))
 
 			sb.Reset()
 

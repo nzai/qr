@@ -6,9 +6,16 @@ import (
 
 	"github.com/nzai/qr/cmd/updater/command"
 	"github.com/urfave/cli/v2"
+	"go.uber.org/zap"
 )
 
 func main() {
+	logger, _ := zap.NewDevelopment()
+	defer logger.Sync()
+
+	undo := zap.ReplaceGlobals(logger)
+	defer undo()
+
 	app := &cli.App{
 		Name:     "updater",
 		Commands: []*cli.Command{},

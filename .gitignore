@@ -21,3 +21,4 @@ cmd/cli/cli
 cmd/chart/chart
 cmd/indicator/indicator
 cmd/fasync/fasync
+cmd/updater/updater

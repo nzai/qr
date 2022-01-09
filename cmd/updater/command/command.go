@@ -12,6 +12,7 @@ var (
 	Commands = []Commander{
 		ShowVersion{},
 		FetchData{},
+		Simulate{},
 	}
 )
 
