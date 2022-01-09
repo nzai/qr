@@ -11,9 +11,9 @@ type MoveAverage struct {
 	call     bool
 }
 
-func NewMA(peroid int) *MoveAverage {
+func NewMA(peroid, precision int) *MoveAverage {
 	return &MoveAverage{
-		indicate: indicator.NewMoveAverage(peroid, 2),
+		indicate: indicator.NewMoveAverage(peroid, precision),
 	}
 }
 

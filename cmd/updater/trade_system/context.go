@@ -152,8 +152,6 @@ func (c *Context) Sell(ctx context.Context, price float64, quantity uint64) (*Tr
 	sellAmount := price * float64(quantity)
 	c.balance += sellAmount - tax
 
-	// profile := (price-c.holdingCast)*float64(quantity) - tax
-
 	c.holdingQuantity -= quantity
 	if c.holdingQuantity == 0 {
 		c.holdingCast = 0
@@ -173,7 +171,7 @@ func (c *Context) Sell(ctx context.Context, price float64, quantity uint64) (*Tr
 	// 	zap.Float64("banlance", c.balance),
 	// 	zap.Float64("holdingCast", c.holdingCast),
 	// 	zap.Uint64("holdingQuantity", c.holdingQuantity),
-	// 	zap.Float64("profile", profile),
+	// 	zap.Float64("profile", (price-c.holdingCast)*float64(quantity)-tax),
 	// 	zap.Float64("tax", tax))
 
 	return result, nil
