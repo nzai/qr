@@ -13,13 +13,16 @@
         var myChart = echarts.init(document.getElementById('main'));
 
         var upColor = '#ec0000';
+        var upBorderColor = '#8A0000';
         var downColor = '#00da3c';
+        var downBorderColor = '#008F28';
+
         $.get('/chart', function (rawData) {
             // 指定图表的配置项和数据
             var option = {
                 animation: false,
                 legend: {
-                    bottom: 10,
+                    // bottom: 10,
                     left: 'center',
                     data: ['Qutoe']
                 },
@@ -167,14 +170,14 @@
                         itemStyle: {
                             color: upColor,
                             color0: downColor,
-                            borderColor: undefined,
-                            borderColor0: undefined
+                            // borderColor: upBorderColor,
+                            // borderColor0: downBorderColor
                         },
                         tooltip: {
                             formatter: function (param) {
                                 param = param[0];
                                 return [
-                                    'Date: ' + param.name + '<hr size=1 style="margin: 3px 0">',
+                                    'Date: ' + 'rawData.category' + '<hr size=1 style="margin: 3px 0">',
                                     'Open: ' + param.data[0] + '<br/>',
                                     'Close: ' + param.data[1] + '<br/>',
                                     'Lowest: ' + param.data[2] + '<br/>',
@@ -191,6 +194,70 @@
                         data: rawData.volume
                     }
                 ]
+            };
+
+            // indicators
+            for (var index = 0; index < rawData.indicator_names.length; index++) {
+                indicatorName = rawData.indicator_names[index];
+
+                indicatorValues = [];
+                for (var qi = 0; qi < rawData.result.snapshots.length; qi++) {
+                    value = "-";
+                    if (rawData.result.snapshots[qi].indicators.hasOwnProperty(indicatorName)) {
+                        value = rawData.result.snapshots[qi].indicators[indicatorName]
+                    }
+
+                    indicatorValues.push(value);
+                }
+
+
+                option.series.push({
+                    name: indicatorName,
+                    type: 'line',
+                    data: indicatorValues,
+                    smooth: true,
+                    lineStyle: {
+                        opacity: 0.5
+                    }
+                });
+
+                option.legend.data.push(indicatorName);
+            }
+
+            // mark point
+            markData = [];
+            for (var qi = 0; qi < rawData.result.snapshots.length; qi++) {
+                if (rawData.result.snapshots[qi].operations.length == 0) {
+                    continue
+                }
+
+                actions = [];
+                for (var oi = 0; oi < rawData.result.snapshots[qi].operations.length; oi++) {
+                    actions.push(rawData.result.snapshots[qi].operations[oi]);
+                }
+
+                markData.push({
+                    name: 'Mark',
+                    coord: [rawData.category[qi], rawData.quote[qi][1]],
+                    // value: rawData.quote[qi][1],
+                    value: actions.join('\n'),
+                    itemStyle: {
+                        color: 'rgb(41,60,85)'
+                    }
+                });
+            }
+            option.series[0].markPoint = {
+                // label: {
+                //     formatter: function (param) {
+                //         return param.value;
+                //     }
+                // },
+                data: markData,
+                tooltip: {
+                    formatter: function (param) {
+                        return param.value;
+                    }
+                }
             };
 
             // 使用刚指定的配置项和数据显示图表。

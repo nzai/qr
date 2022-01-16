@@ -190,6 +190,7 @@ func (s Simulate) simulate(ctx context.Context, amount float64, qs []*quotes.Quo
 	for index, quote := range qs {
 		context.Current = quote
 		context.Prev = qs[:index+1]
+		context.Operations = nil
 
 		err = system.Next(context)
 		if err != nil {
@@ -197,12 +198,17 @@ func (s Simulate) simulate(ctx context.Context, amount float64, qs []*quotes.Quo
 			return nil, err
 		}
 
+		operations := make([]string, len(context.Operations))
+		copy(operations, context.Operations)
+
 		cast, quantity := context.Holding()
 		snapShots = append(snapShots, &simulateSnapShot{
 			Balance:         context.Balance(),
 			HoldingCast:     cast,
 			HoldingQuantity: quantity,
 			Worth:           context.Balance() + float64(context.Current.Close)*float64(quantity),
+			Indicators:      context.Indicators(),
+			Operations:      operations,
 		})
 	}
 
@@ -229,11 +235,30 @@ type simulateResult struct {
 	SnapShots             []*simulateSnapShot `json:"snapshots"`
 }
 
+func (s simulateResult) IndicatorNames() []string {
+	if len(s.SnapShots) == 0 {
+		return []string{}
+	}
+
+	return s.SnapShots[len(s.SnapShots)-1].IndicatorNames()
+}
+
 type simulateSnapShot struct {
-	Balance         float64 `json:"balance"`
-	HoldingCast     float64 `json:"holding_cast"`
-	HoldingQuantity uint64  `json:"holding_quantity"`
-	Worth           float64 `json:"worth"`
+	Balance         float64            `json:"balance"`
+	HoldingCast     float64            `json:"holding_cast"`
+	HoldingQuantity uint64             `json:"holding_quantity"`
+	Worth           float64            `json:"worth"`
+	Indicators      map[string]float64 `json:"indicators"`
+	Operations      []string           `json:"operations"`
+}
+
+func (s simulateSnapShot) IndicatorNames() []string {
+	names := make([]string, 0, len(s.Indicators))
+	for name := range s.Indicators {
+		names = append(names, name)
+	}
+
+	return names
 }
 
 func (s *Simulate) startGin() {
@@ -265,7 +290,7 @@ func (s *Simulate) showChart(c *gin.Context) {
 
 	var direction int64
 	for index, q := range s.qs {
-		category = append(category, time.Unix(int64(q.Timestamp), 0).Format("2006/01/02"))
+		category = append(category, time.Unix(int64(q.Timestamp), 0).Format("2006-01-02"))
 		quote = append(quote, []float32{q.Open, q.Close, q.High, q.Low})
 
 		direction = 1
@@ -276,10 +301,11 @@ func (s *Simulate) showChart(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"catetory": category,
-		"quote":    quote,
-		"volume":   volume,
-		"result":   s.result,
+		"category":        category,
+		"quote":           quote,
+		"volume":          volume,
+		"result":          s.result,
+		"indicator_names": s.result.IndicatorNames(),
 	})
 
 }

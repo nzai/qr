@@ -29,6 +29,8 @@ func (a *MoveAverage) Next(ctx *Context) error {
 		return nil
 	}
 
+	ctx.SetIndicator(a.indicate.String(), ma)
+
 	var err error
 	if !a.call && float64(ctx.Current.Close) > ma {
 		quantity := uint64(ctx.Balance() * 0.995 / float64(ctx.Current.Close))

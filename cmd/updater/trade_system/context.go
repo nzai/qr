@@ -3,6 +3,7 @@ package trade_system
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/nzai/qr/quotes"
@@ -24,6 +25,9 @@ type Context struct {
 	holdingCast     float64
 	holdingQuantity uint64
 	holdingMutex    *sync.RWMutex
+	indicators      map[string]float64
+	indicatorsMutex *sync.Mutex
+	Operations      []string
 }
 
 func NewContext(ctx context.Context, balance float64) *Context {
@@ -34,6 +38,9 @@ func NewContext(ctx context.Context, balance float64) *Context {
 		holdingCast:     0,
 		holdingQuantity: 0,
 		holdingMutex:    new(sync.RWMutex),
+		indicators:      make(map[string]float64),
+		indicatorsMutex: new(sync.Mutex),
+		Operations:      nil,
 	}
 }
 
@@ -77,6 +84,8 @@ func (c *Context) Buy(price float64, quantity uint64) (*TradeResult, error) {
 		HoldingCast:     c.holdingCast,
 		HoldingQuantity: c.holdingQuantity,
 	}
+
+	c.Operations = append(c.Operations, fmt.Sprintf("[BUY]price:%.2f quantity:%d worth:%.2f", price, quantity, c.balance+c.holdingCast*float64(c.holdingQuantity)))
 
 	// zap.L().Debug("buy successfully",
 	// 	zap.Time("time", time.Unix(int64(c.Current.Timestamp), 0)),
@@ -164,6 +173,8 @@ func (c *Context) Sell(ctx context.Context, price float64, quantity uint64) (*Tr
 		HoldingQuantity: c.holdingQuantity,
 	}
 
+	c.Operations = append(c.Operations, fmt.Sprintf("[SELL]price:%.2f quantity:%d worth:%.2f", price, quantity, c.balance+c.holdingCast*float64(c.holdingQuantity)))
+
 	// zap.L().Debug("sell successfully",
 	// 	zap.Time("time", time.Unix(int64(c.Current.Timestamp), 0)),
 	// 	zap.Float64("price", price),
@@ -218,4 +229,30 @@ func (c Context) sellTax(price float64, quantity uint64) float64 {
 	}
 
 	return stampTax + float64(transferFee) + float64(commission)
+}
+
+func (c *Context) SetIndicator(key string, value float64) {
+	c.indicatorsMutex.Lock()
+	defer c.indicatorsMutex.Unlock()
+
+	c.indicators[key] = value
+}
+
+func (c *Context) SetIndicators(indicators map[string]float64) {
+	c.indicatorsMutex.Lock()
+	defer c.indicatorsMutex.Unlock()
+
+	c.indicators = indicators
+}
+
+func (c Context) Indicators() map[string]float64 {
+	c.indicatorsMutex.Lock()
+	defer c.indicatorsMutex.Unlock()
+
+	indicators := make(map[string]float64, len(c.indicators))
+	for key, value := range c.indicators {
+		indicators[key] = value
+	}
+
+	return indicators
 }

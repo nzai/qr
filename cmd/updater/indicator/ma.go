@@ -1,5 +1,7 @@
 package indicator
 
+import "fmt"
+
 type MoveAverage struct {
 	peroid    int
 	precision int
@@ -20,6 +22,10 @@ func NewMoveAverage(peroid, precision int) *MoveAverage {
 		precision: precision,
 		values:    make([]float64, 0),
 	}
+}
+
+func (ma MoveAverage) String() string {
+	return fmt.Sprintf("MA%d", ma.peroid)
 }
 
 func (ma MoveAverage) Value() float64 {
