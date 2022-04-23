@@ -156,6 +156,8 @@ func (s Scheduler) crawl(exchange exchanges.Exchange, dates ...time.Time) error 
 		return nil
 	}
 
+	zap.L().Debug("try to get exchange companies", zap.String("exchange", exchange.Code()))
+
 	// get companies
 	companies, err := exchange.Companies()
 	if err != nil {

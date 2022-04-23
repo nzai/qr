@@ -55,13 +55,6 @@ func main() {
 	}
 	defer store.Close()
 
-	// notifier := notifiers.NewNsq(conf.Nsq.Broker, conf.Nsq.TLSCert, conf.Nsq.TLSKey, conf.Nsq.Topic)
-	// defer notifier.Close()
-
-	// zap.L().Info("init nsq notifier success",
-	// 	zap.String("broker", conf.Nsq.Broker),
-	// 	zap.String("topic", conf.Nsq.Topic))
-
 	_exchanges, err := exchanges.Parse(conf.Exchanges)
 	if err != nil {
 		zap.L().Fatal("parse exchange argument failed",

@@ -14,7 +14,6 @@ require (
 	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/google/uuid v1.3.0
 	github.com/gopherjs/gopherjs v0.0.0-20180825215210-0210a2f0f73c // indirect
-	github.com/guotie/gogb2312 v0.0.0-20160513031741-a052a05f3e7e
 	github.com/influxdata/influxdb1-client v0.0.0-20191209144304-8bf82d3c094d
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/jtolds/gls v4.2.1+incompatible // indirect
