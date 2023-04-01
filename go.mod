@@ -17,7 +17,7 @@ require (
 	github.com/nzai/bio v0.1.5
 	github.com/nzai/netop v0.3.1
 	github.com/syndtr/goleveldb v1.0.0
-	github.com/taosdata/driver-go/v2 v2.0.6
+	github.com/taosdata/driver-go/v3 v3.1.0
 	github.com/urfave/cli/v2 v2.25.0
 	go.uber.org/zap v1.24.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
@@ -34,6 +34,7 @@ require (
 	github.com/goccy/go-json v0.10.0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
+	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.4 // indirect

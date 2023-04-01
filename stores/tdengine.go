@@ -10,7 +10,7 @@ import (
 
 	"github.com/nzai/qr/exchanges"
 	"github.com/nzai/qr/quotes"
-	_ "github.com/taosdata/driver-go/v2/taosSql"
+	_ "github.com/taosdata/driver-go/v3/taosRestful"
 	"go.uber.org/zap"
 )
 

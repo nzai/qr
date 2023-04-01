@@ -11,7 +11,7 @@ import (
 
 	"github.com/nzai/qr/quotes"
 	"github.com/nzai/qr/utils"
-	_ "github.com/taosdata/driver-go/v2/taosSql"
+	_ "github.com/taosdata/driver-go/v3/taosRestful"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 )
