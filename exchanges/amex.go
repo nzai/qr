@@ -1,7 +1,6 @@
 package exchanges
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/nzai/qr/quotes"
@@ -10,14 +9,19 @@ import (
 
 // Amex define american stock exchange
 type Amex struct {
-	source   sources.Source
-	location *time.Location
+	source        sources.Source
+	companySource *sources.NasdaqSource
+	location      *time.Location
 }
 
 // NewAmex create american stock exchange
 func NewAmex() *Amex {
 	location, _ := time.LoadLocation("America/New_York")
-	return &Amex{source: sources.NewYahooFinance(), location: location}
+	return &Amex{
+		source:        sources.NewYahooFinance(),
+		companySource: sources.NewNasdaqSource(),
+		location:      location,
+	}
 }
 
 // Code get exchange code
@@ -32,12 +36,7 @@ func (s Amex) Location() *time.Location {
 
 // Companies get exchange companies
 func (s Amex) Companies() (map[string]*quotes.Company, error) {
-	urls := make([]string, 0, 26)
-	for index := 0; index < 26; index++ {
-		urls = append(urls, fmt.Sprintf("http://eoddata.com/stocklist/AMEX/%s.htm", string('A'+index)))
-	}
-
-	return getEodSymbol().Companies(urls...)
+	return s.companySource.Companies(s.Code())
 }
 
 // Crawl company daily quote
