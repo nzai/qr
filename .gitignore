@@ -22,3 +22,4 @@ cmd/chart/chart
 cmd/indicator/indicator
 cmd/fasync/fasync
 cmd/updater/updater
+cmd/crawl/crawl

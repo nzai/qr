@@ -16,6 +16,22 @@
                 "-c",
                 "config.toml"
             ]
+        },
+        {
+            "name": "Launch crawl",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/cmd/crawl/main.go",
+            "env": {},
+            "cwd": "${workspaceFolder}/cmd/crawl/",
+            "args": [
+                "fr",
+                "-mysql",
+                "root:123456@tcp(127.0.0.1:3306)/quote?parseTime=true&charset=utf8mb4",
+                "-date",
+                "2024-03-31",
+            ]
         }
     ]
 }
