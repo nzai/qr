@@ -246,22 +246,18 @@ func (s Scheduler) crawlCompaniesDailyQuote(exchange exchanges.Exchange, compani
 	wg := new(sync.WaitGroup)
 	wg.Add(len(companies))
 
+	zap.S().Infow("companies daili", "exchange", exchange.Code(), "companies", len(companies), "date", date.Format("20060102"))
 	mutex := new(sync.Mutex)
 	cdqs := make(map[string]*quotes.CompanyDailyQuote, len(companies))
 	for _, company := range companies {
 		go func(_company *quotes.Company) {
 			cdq, err := exchange.Crawl(_company, date)
-			// if err != nil {
-			// 	zap.L().Warn("crawl daily quote failed",
-			// 		zap.Error(err),
-			// 		zap.Any("company", company),
-			// 		zap.Time("date", date))
-			// }
-
 			if err == nil && !cdq.IsEmpty() {
 				mutex.Lock()
 				cdqs[_company.Code] = cdq
-				// zap.L().Debug("cdq success", zap.Any("company", _company), zap.Int(exchange.Code(), len(cdqs)))
+				// if len(cdqs)%10 == 0 {
+				// 	zap.S().Infow("continue", "companies", len(cdqs), "total", len(companies))
+				// }
 				mutex.Unlock()
 			}
 

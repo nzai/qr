@@ -195,22 +195,28 @@ func (q CompanyDailyQuote) Encode(w io.Writer) error {
 		return err
 	}
 
-	err = q.Dividend.Encode(bw)
-	if err != nil {
-		zap.L().Error("encode dividend failed", zap.Error(err), zap.Any("dividend", q.Dividend))
-		return err
+	if q.Dividend != nil {
+		err = q.Dividend.Encode(bw)
+		if err != nil {
+			zap.L().Error("encode dividend failed", zap.Error(err), zap.Any("dividend", q.Dividend))
+			return err
+		}
 	}
 
-	err = q.Split.Encode(bw)
-	if err != nil {
-		zap.L().Error("encode split failed", zap.Error(err), zap.Any("split", q.Split))
-		return err
+	if q.Split != nil {
+		err = q.Split.Encode(bw)
+		if err != nil {
+			zap.L().Error("encode split failed", zap.Error(err), zap.Any("split", q.Split))
+			return err
+		}
 	}
 
-	err = q.Pre.Encode(bw)
-	if err != nil {
-		zap.L().Error("encode pre serial failed", zap.Error(err), zap.Int("count", len(*q.Pre)))
-		return err
+	if q.Pre != nil {
+		err = q.Pre.Encode(bw)
+		if err != nil {
+			zap.L().Error("encode pre serial failed", zap.Error(err), zap.Int("count", len(*q.Pre)))
+			return err
+		}
 	}
 
 	err = q.Regular.Encode(bw)
@@ -219,10 +225,12 @@ func (q CompanyDailyQuote) Encode(w io.Writer) error {
 		return err
 	}
 
-	err = q.Post.Encode(bw)
-	if err != nil {
-		zap.L().Error("encode post serial failed", zap.Error(err), zap.Int("count", len(*q.Post)))
-		return err
+	if q.Post != nil {
+		err = q.Post.Encode(bw)
+		if err != nil {
+			zap.L().Error("encode post serial failed", zap.Error(err), zap.Int("count", len(*q.Post)))
+			return err
+		}
 	}
 
 	return nil

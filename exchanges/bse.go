@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/nzai/qr/constants"
@@ -49,7 +50,7 @@ func (s Bse) Location() *time.Location {
 // Companies get exchange companies
 func (s Bse) Companies() (map[string]*quotes.Company, error) {
 	companies := make(map[string]*quotes.Company)
-	pageIndex := 1
+	pageIndex := 0
 	for {
 		totalPage, _companies, err := s.getCompanyByPageIndex(pageIndex)
 		if err != nil {
@@ -66,6 +67,7 @@ func (s Bse) Companies() (map[string]*quotes.Company, error) {
 		}
 	}
 
+	zap.S().Infow("successfully get companies", "companies", len(companies))
 	return companies, nil
 }
 
@@ -78,7 +80,13 @@ func (s Bse) getCompanyByPageIndex(pageIndex int) (int, []*quotes.Company, error
 		"sorttype":  []string{"asc"},
 	}
 
-	response, err := http.PostForm("https://www.bse.cn/nqxxController/nqxxCnzq.do?callback=jQuery331_1730808249531", uv)
+	request, _ := http.NewRequest(http.MethodPost, "https://www.bse.cn/nqxxController/nqxxCnzq.do?callback=jQuery331_1730808249531", strings.NewReader(uv.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+	request.Header.Set("Referer", "https://www.bse.cn/nq/listedcompany.html")
+	request.Header.Set("Origin", "https://www.bse.cn")
+	request.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
+
+	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		zap.S().Errorw("failed to get companies", "err", err, "page", pageIndex)
 		return 0, nil, err
@@ -86,7 +94,8 @@ func (s Bse) getCompanyByPageIndex(pageIndex int) (int, []*quotes.Company, error
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		zap.S().Errorw("failed to get companies", "statusCode", response.StatusCode)
+		t, _ := io.ReadAll(response.Body)
+		zap.S().Errorw("failed to get companies", "statusCode", response.StatusCode, "body", string(t))
 		return 0, nil, fmt.Errorf("unexpected response status (%d)%s", response.StatusCode, http.StatusText(response.StatusCode))
 	}
 
@@ -99,15 +108,15 @@ func (s Bse) getCompanyByPageIndex(pageIndex int) (int, []*quotes.Company, error
 	// remove jsonp prefix and suffix
 	body = body[24 : len(body)-1]
 
-	resp := new(bseCompanyResponse)
-	err = json.Unmarshal(body, resp)
+	resp := []*bseCompanyResponse{}
+	err = json.Unmarshal(body, &resp)
 	if err != nil {
-		zap.S().Errorw("unmarshal bse companies failed", "err", err, "body", body)
+		zap.S().Errorw("unmarshal bse companies failed", "err", err, "body", string(body))
 		return 0, nil, err
 	}
 
-	companies := make([]*quotes.Company, 0, len(resp.Content))
-	for _, c := range resp.Content {
+	companies := make([]*quotes.Company, 0, len(resp[0].Content))
+	for _, c := range resp[0].Content {
 		if !s.validCodeRegex.MatchString(c.Xxzqdm) {
 			continue
 		}
@@ -118,7 +127,7 @@ func (s Bse) getCompanyByPageIndex(pageIndex int) (int, []*quotes.Company, error
 		})
 	}
 
-	return resp.TotalPages, companies, nil
+	return resp[0].TotalPages, companies, nil
 }
 
 // Crawl company daily quote
@@ -132,16 +141,21 @@ func (s Bse) Crawl(company *quotes.Company, date time.Time) (*quotes.CompanyDail
 		Post:     new(quotes.Serial),
 	}
 
-	if date.Before(utils.TodayZero(time.Now())) {
+	if date.Before(utils.YesterdayZero(time.Now())) {
 		return cdq, nil
 	}
 
 	// query quote date from bse
 	u := fmt.Sprintf("https://www.bse.cn/companyEchartsController/getTimeSharingChart/list/%s.do?begin=0&end=-1", company.Code)
 
-	code, buffer, err := utils.TryDownloadBytes(u, constants.RetryCount, constants.RetryInterval)
+	header := map[string]string{
+		"Origin":     "https://www.bse.cn",
+		"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+	}
+
+	code, buffer, err := utils.TryDownloadBytesWithHeader(u, header, constants.RetryCount, constants.RetryInterval)
 	if err != nil {
-		// zap.L().Warn("download yahoo finance quote failed", zap.Error(err), zap.String("url", url))
+		zap.L().Warn("download yahoo finance quote failed", zap.Error(err), zap.String("url", u))
 		return nil, err
 	}
 
@@ -280,15 +294,15 @@ type bseDailyQuoteResponse struct {
 }
 
 type bseDailyQuoteLine struct {
-	Hqzgcj int     `json:"HQZGCJ"` // 最高成交
+	Hqzgcj float32 `json:"HQZGCJ"` // 最高成交
 	Hqgxsj string  `json:"HQGXSJ"` // 时间 format: hMMdd
-	Hqzrsp float64 `json:"HQZRSP"` // 昨日收盘
-	Hqjrkp float64 `json:"HQJRKP"` // 今日开盘
+	Hqzrsp float32 `json:"HQZRSP"` // 昨日收盘
+	Hqjrkp float32 `json:"HQJRKP"` // 今日开盘
 	Hqjsrq string  `json:"HQJSRQ"` // 日期
-	Hqzdcj float64 `json:"HQZDCJ"` // 最低成交
-	Hqcjsl int     `json:"HQCJSL"` // 累计成交数量
-	Hqcjje float64 `json:"HQCJJE"` // 累计成交金额
+	Hqzdcj float32 `json:"HQZDCJ"` // 最低成交
+	Hqcjsl int64   `json:"HQCJSL"` // 累计成交数量
+	Hqcjje float32 `json:"HQCJJE"` // 累计成交金额
 	ID     string  `json:"id"`
 	Xxzqdm string  `json:"XXZQDM"`
-	Hqzjcj float64 `json:"HQZJCJ"` // 最近成交
+	Hqzjcj float32 `json:"HQZJCJ"` // 最近成交
 }
