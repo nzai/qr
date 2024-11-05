@@ -16,18 +16,15 @@ type Exchange interface {
 	Crawl(*quotes.Company, time.Time) (*quotes.CompanyDailyQuote, error)
 }
 
-var dict = map[string]Exchange{
-	"Nasdaq": NewNasdaq(),
-	"Nyse":   NewNyse(),
-	"Amex":   NewAmex(),
-	"Sse":    NewSse(),
-	"Szse":   NewSzse(),
-	"Hkex":   NewHkex(),
+var _exchanges = map[string]Exchange{}
+
+func Register(e Exchange) {
+	_exchanges[e.Code()] = e
 }
 
 // Get get exchange by code
 func Get(code string) (Exchange, bool) {
-	exchange, found := dict[code]
+	exchange, found := _exchanges[code]
 	return exchange, found
 }
 
@@ -42,7 +39,7 @@ func Parse(arg string) ([]Exchange, error) {
 	for _, code := range parts {
 		exchange, found := Get(code)
 		if !found {
-			return nil, fmt.Errorf("exchange invalid: %s", code)
+			return nil, fmt.Errorf("invalid exchange: %s", code)
 		}
 
 		exchanges = append(exchanges, exchange)

@@ -2,7 +2,7 @@ package utils
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"time"
 
@@ -39,10 +39,20 @@ func TryDownloadBytesWithHeader(url string, headers map[string]string, retry int
 	var code int
 	var buffer []byte
 	var err error
+	start := time.Now()
 	for index := 0; index < retry; index++ {
 		code, buffer, err = tryDownloadBytesOnce(url, headers)
 		if err == nil && code == http.StatusOK {
 			return code, buffer, nil
+		}
+
+		if code == http.StatusTooManyRequests {
+			if time.Since(start).Hours() > 12 {
+				break
+			}
+
+			index--
+			continue
 		}
 
 		if index < retry-1 {
@@ -75,7 +85,7 @@ func tryDownloadBytesOnce(url string, headers map[string]string) (int, []byte, e
 		return response.StatusCode, nil, nil
 	}
 
-	buffer, err := ioutil.ReadAll(response.Body)
+	buffer, err := io.ReadAll(response.Body)
 	if err != nil {
 		zap.L().Warn("read http response body failed", zap.Error(err), zap.String("url", url))
 		return 0, nil, err

@@ -14,6 +14,10 @@ import (
 	"go.uber.org/zap"
 )
 
+func init() {
+	Register(NewSse())
+}
+
 // Sse define shanghai stock exchange
 type Sse struct {
 	source         sources.Source

@@ -13,6 +13,10 @@ import (
 	"go.uber.org/zap"
 )
 
+func init() {
+	Register(NewHkex())
+}
+
 // Hkex define hongkong exchange
 type Hkex struct {
 	source   sources.Source

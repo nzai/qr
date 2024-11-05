@@ -7,6 +7,10 @@ import (
 	"github.com/nzai/qr/sources"
 )
 
+func init() {
+	Register(NewNasdaq())
+}
+
 // Nasdaq define nasdaq exchange
 type Nasdaq struct {
 	source        sources.Source

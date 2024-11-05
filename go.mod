@@ -11,7 +11,7 @@ require (
 	github.com/gin-contrib/pprof v1.4.0
 	github.com/gin-gonic/gin v1.9.0
 	github.com/go-redis/redis v6.15.9+incompatible
-	github.com/google/uuid v1.3.0
+	github.com/google/uuid v1.6.0
 	github.com/influxdata/influxdb1-client v0.0.0-20220302092344-a9ab5670611c
 	github.com/mozillazg/go-cos v0.13.0
 	github.com/nsqio/go-nsq v1.1.0
@@ -20,7 +20,7 @@ require (
 	github.com/nzai/log v1.2.1
 	github.com/nzai/netop v0.3.1
 	github.com/syndtr/goleveldb v1.0.0
-	github.com/taosdata/driver-go/v3 v3.1.0
+	github.com/taosdata/driver-go/v3 v3.5.8
 	github.com/urfave/cli/v2 v2.25.0
 	github.com/urfave/cli/v3 v3.0.0-alpha9
 	go.uber.org/zap v1.27.0
@@ -39,7 +39,7 @@ require (
 	github.com/goccy/go-json v0.10.0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
-	github.com/gorilla/websocket v1.5.0 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect

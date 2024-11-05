@@ -7,6 +7,10 @@ import (
 	"github.com/nzai/qr/sources"
 )
 
+func init() {
+	Register(NewNyse())
+}
+
 // Nyse define new york stock exchange
 type Nyse struct {
 	source        sources.Source

@@ -7,6 +7,10 @@ import (
 	"github.com/nzai/qr/sources"
 )
 
+func init() {
+	Register(NewAmex())
+}
+
 // Amex define american stock exchange
 type Amex struct {
 	source        sources.Source
